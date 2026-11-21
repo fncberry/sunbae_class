@@ -4,29 +4,21 @@ import { Play } from "lucide-react";
 import { PurchaseBox } from "@/components/PurchaseBox";
 import { SyllabusRow } from "@/components/SyllabusRow";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-import {
-  courseLabel,
-  getCourse,
-  getInstructor,
-  getLecture,
-  getReviews,
-  lectures,
-  totalMinutes,
-} from "@/lib/mock-data";
-import { koDate, minutesLabel, won } from "@/lib/format";
+import { getLecture, listLectureIds, listReviews } from "@/lib/data";
+import { courseLabel, koDate, minutesLabel, totalMinutes, won } from "@/lib/format";
 
-export function generateStaticParams() {
-  return lectures.map((l) => ({ lectureId: l.id }));
+export async function generateStaticParams() {
+  const ids = await listLectureIds();
+  return ids.map((lectureId) => ({ lectureId }));
 }
 
 export default async function LecturePage(props: PageProps<"/lectures/[lectureId]">) {
   const { lectureId } = await props.params;
-  const lecture = getLecture(lectureId);
+  const lecture = await getLecture(lectureId);
   if (!lecture) notFound();
 
-  const course = getCourse(lecture.courseId)!;
-  const instructor = getInstructor(lecture.instructorId)!;
-  const lectureReviews = getReviews(lecture.id);
+  const { course, instructor } = lecture;
+  const lectureReviews = await listReviews(lecture.id);
   const preview = lecture.chapters.find((c) => c.preview);
 
   return (

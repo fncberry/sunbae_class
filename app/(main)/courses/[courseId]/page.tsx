@@ -1,19 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LectureCard } from "@/components/LectureCard";
-import { courses, getCourse, getLecturesByCourse } from "@/lib/mock-data";
+import { getCourse, listCourses, listLecturesByCourse } from "@/lib/data";
 import { koDate } from "@/lib/format";
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const courses = await listCourses();
   return courses.map((c) => ({ courseId: c.id }));
 }
 
 export default async function CoursePage(props: PageProps<"/courses/[courseId]">) {
   const { courseId } = await props.params;
-  const course = getCourse(courseId);
+  const course = await getCourse(courseId);
   if (!course) notFound();
 
-  const courseLectures = getLecturesByCourse(course.id);
+  const courseLectures = await listLecturesByCourse(course.id);
   const isMajor = course.kind === "major";
 
   return (

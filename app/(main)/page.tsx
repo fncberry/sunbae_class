@@ -1,16 +1,15 @@
 import Link from "next/link";
 import { CourseSearch } from "@/components/CourseSearch";
 import { LectureCard } from "@/components/LectureCard";
-import { courses, lectures } from "@/lib/mock-data";
+import { listCatalogCourses, listPopularLectures } from "@/lib/data";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const [catalog, popular] = await Promise.all([listCatalogCourses(), listPopularLectures(3)]);
   // 홈 검색은 대학 수업만, 강의 많은 순으로 몇 개만 보여준다. 전체는 /courses
-  const coursesWithCount = courses
+  const coursesWithCount = catalog
     .filter((c) => c.kind === "major")
-    .map((c) => ({ ...c, lectureCount: lectures.filter((l) => l.courseId === c.id).length }))
     .sort((a, b) => b.lectureCount - a.lectureCount)
     .slice(0, 5);
-  const popular = [...lectures].sort((a, b) => b.sales - a.sales).slice(0, 3);
 
   return (
     <div className="mx-auto max-w-6xl px-6">

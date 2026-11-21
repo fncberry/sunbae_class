@@ -1,12 +1,11 @@
 import { DashboardShell } from "@/components/DashboardShell";
 import { VerificationQueue } from "@/components/VerificationQueue";
-import { getCourse, verificationQueue } from "@/lib/mock-data";
+import { listVerificationRequests } from "@/lib/data";
+import { courseShortLabel } from "@/lib/format";
 
-export default function AdminPage() {
-  const rows = verificationQueue.map((v) => {
-    const c = getCourse(v.courseId)!;
-    return { ...v, courseLabel: c.kind === "major" ? `${c.code} ${c.name} (${c.professor})` : c.name };
-  });
+export default async function AdminPage() {
+  const requests = await listVerificationRequests();
+  const rows = requests.map(({ course, ...v }) => ({ ...v, courseLabel: courseShortLabel(course) }));
 
   return (
     <DashboardShell

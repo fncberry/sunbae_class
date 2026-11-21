@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import type { Course, CourseKind } from "@/lib/mock-data";
+import type { CatalogCourse, CourseKind } from "@/lib/types";
 import { koDate, won } from "@/lib/format";
-
-export type CatalogCourse = Course & { lectureCount: number; minPrice: number | null };
 
 type Sort = "exam" | "lectures" | "students";
 

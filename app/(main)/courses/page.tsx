@@ -1,8 +1,8 @@
 import { CourseCatalog } from "@/components/CourseCatalog";
-import { courses, courseStats } from "@/lib/mock-data";
+import { listCatalogCourses } from "@/lib/data";
 
-export default function CoursesPage() {
-  const catalog = courses.map((c) => ({ ...c, ...courseStats(c.id) }));
+export default async function CoursesPage() {
+  const catalog = await listCatalogCourses();
 
   return (
     <div className="mx-auto max-w-6xl px-6 pt-14">
