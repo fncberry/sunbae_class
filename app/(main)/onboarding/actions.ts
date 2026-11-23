@@ -1,5 +1,6 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser, onboardingPath, safeNextPath } from "@/lib/auth";
 import { checkNickname, normalizeMajor, normalizeName, normalizeStudentId } from "@/lib/onboarding";
@@ -68,5 +69,7 @@ export async function completeOnboarding(_prev: OnboardingState, formData: FormD
   }
   if (!data?.onboarded_at) return fail("저장하지 못했어요. 잠시 뒤에 다시 시도해 주세요.");
 
+  // 헤더(레이아웃)는 화면을 옮겨도 다시 그려지지 않으므로, 닉네임이 바로 보이게 새로 받아온다
+  refresh();
   redirect(next);
 }

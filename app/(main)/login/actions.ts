@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { SCHOOL_EMAIL_DOMAIN, safeNextPath } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -31,6 +32,8 @@ export async function signInWithGoogle(formData: FormData) {
 export async function signOut() {
   const supabase = await createServerSupabase();
   await supabase.auth.signOut();
+  // 헤더가 로그인 상태로 남지 않게 새로 받아온다
+  refresh();
   redirect("/");
 }
 
