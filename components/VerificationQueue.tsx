@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { VerificationRequest } from "@/lib/mock-data";
+import type { VerificationRequest } from "@/lib/types";
 
 type Row = VerificationRequest & { courseLabel: string };
 type Status = "대기" | "승인" | "반려";

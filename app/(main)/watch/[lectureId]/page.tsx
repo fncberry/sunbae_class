@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Play } from "lucide-react";
-import { getCourse, getInstructor, getLecture, lectures } from "@/lib/mock-data";
+import { getLecture, listLectureIds } from "@/lib/data";
 
-export function generateStaticParams() {
-  return lectures.map((l) => ({ lectureId: l.id }));
+// TODO(인증 단계): 수강권 확인이 들어가면 이 페이지는 요청 시점 렌더링으로 바뀐다.
+export async function generateStaticParams() {
+  const ids = await listLectureIds();
+  return ids.map((lectureId) => ({ lectureId }));
 }
 
 // 목업: 로그인한 수강생 (실제로는 Supabase 세션에서 가져옴)
@@ -13,11 +15,10 @@ const currentIndex = 3;
 
 export default async function WatchPage(props: PageProps<"/watch/[lectureId]">) {
   const { lectureId } = await props.params;
-  const lecture = getLecture(lectureId);
+  const lecture = await getLecture(lectureId);
   if (!lecture) notFound();
 
-  const course = getCourse(lecture.courseId)!;
-  const instructor = getInstructor(lecture.instructorId)!;
+  const { course, instructor } = lecture;
   const total = lecture.chapters.length;
   const current = lecture.chapters[Math.min(currentIndex, total - 1)];
 

@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { courseLabel, getCourse, getInstructor, totalMinutes, type Lecture } from "@/lib/mock-data";
-import { minutesLabel, won } from "@/lib/format";
+import type { LectureWithRelations } from "@/lib/types";
+import { courseLabel, minutesLabel, totalMinutes, won } from "@/lib/format";
 import { VerifiedBadge } from "./VerifiedBadge";
 
 /** 강의 한 줄. 목록에서 카드 대신 행으로 쓴다. */
-export function LectureCard({ lecture, showCourse = true }: { lecture: Lecture; showCourse?: boolean }) {
-  const course = getCourse(lecture.courseId)!;
-  const instructor = getInstructor(lecture.instructorId)!;
+export function LectureCard({ lecture, showCourse = true }: { lecture: LectureWithRelations; showCourse?: boolean }) {
+  const { course, instructor } = lecture;
 
   return (
     <li className="border-t border-rule first:border-t-0">

@@ -2,22 +2,17 @@ import Link from "next/link";
 import { Upload } from "lucide-react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
-import {
-  courseLabel,
-  courses,
-  currentInstructorId,
-  getCourse,
-  getInstructor,
-  instructorShare,
-  lectures,
-  monthlySales,
-} from "@/lib/mock-data";
-import { won } from "@/lib/format";
+import { getMyInstructorDashboard } from "@/lib/data";
+import { courseLabel, won } from "@/lib/format";
 
-export default function InstructorPage() {
-  const me = getInstructor(currentInstructorId)!;
-  const verifiedCourse = getCourse(me.verifiedCourseId)!;
-  const myLectures = lectures.filter((l) => l.instructorId === me.id);
+export default async function InstructorPage() {
+  const {
+    instructor: me,
+    verifiedCourse,
+    lectures: myLectures,
+    monthlySales,
+    share: instructorShare,
+  } = await getMyInstructorDashboard();
   const mainPrice = myLectures[0]?.price ?? 0;
   const thisMonth = monthlySales[monthlySales.length - 1];
   const earlier = monthlySales.slice(0, -1);
@@ -111,11 +106,7 @@ export default function InstructorPage() {
             <label className="block text-sm">
               <span className="font-medium">과목</span>
               <select className="mt-2 h-11 w-full rounded-ui border border-ink-faint bg-paper px-3">
-                {courses
-                  .filter((c) => c.id === me.verifiedCourseId)
-                  .map((c) => (
-                    <option key={c.id}>{courseLabel(c)}</option>
-                  ))}
+                <option>{courseLabel(verifiedCourse)}</option>
               </select>
             </label>
             <label className="block text-sm">

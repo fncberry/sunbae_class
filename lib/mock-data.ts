@@ -1,68 +1,8 @@
 // ⚠️ 목업용 더미 데이터입니다. 과목·교수·사람 이름은 모두 예시이며 실제와 관계없습니다.
-// 나중에 Supabase 테이블(courses, lectures, instructors, purchases)로 교체할 자리입니다.
+// 화면은 이 파일을 직접 읽지 않고 lib/data.ts의 조회 함수를 거칩니다.
+// Supabase로 옮기면 이 파일은 시드(seed) 데이터로만 씁니다.
 
-export type CourseKind = "major" | "cert";
-
-/**
- * 강의를 묶는 단위.
- * - major: 대학 수업 (학수번호 + 교수님 분반)
- * - cert: 자격증·어학 시험
- */
-export type Course = {
-  id: string;
-  kind: CourseKind;
-  code?: string; // 학수번호 (major만)
-  name: string;
-  professor?: string; // major만
-  semester?: string; // major만
-  group: string; // major: 단과대학 / cert: 분야
-  department?: string; // major: 개설 학과
-  students?: number;
-  examDate: string; // 기말고사일 또는 다음 시험일 (환불 기한 기준)
-  examLabel: string; // "기말고사" | "시험"
-};
-
-export type Instructor = {
-  id: string;
-  name: string;
-  major: string;
-  admissionYear: number;
-  grade: string; // 성적(A+), 점수(965), 합격 등
-  verifiedCourseId: string;
-  verifiedSemester: string;
-  proof: string; // 화면에 보여줄 인증 문구
-  bio: string;
-};
-
-export type Chapter = {
-  title: string;
-  minutes: number;
-  preview?: boolean;
-};
-
-export type Lecture = {
-  id: string;
-  courseId: string;
-  instructorId: string;
-  title: string;
-  summary: string;
-  price: number;
-  studyGroup?: { price: number; capacity: number; remaining: number };
-  chapters: Chapter[];
-  covers: string[];
-  rating: number;
-  reviewCount: number;
-  sales: number;
-  status: "판매 중" | "검수 중";
-};
-
-export type Review = {
-  lectureId: string;
-  author: string;
-  rating: number;
-  text: string;
-  date: string;
-};
+import type { Course, Instructor, Lecture, MonthlySales, Review, VerificationRequest } from "./types";
 
 export const courses: Course[] = [
   { id: "cose213", kind: "major", code: "COSE213", name: "자료구조", professor: "박지훈", semester: "2026-2학기", group: "정보대학", department: "컴퓨터학과", students: 182, examDate: "2026-12-16", examLabel: "기말고사" },
@@ -335,23 +275,13 @@ export const reviews: Review[] = [
 export const currentInstructorId = "jung";
 export const instructorShare = 0.7; // 강사 정산 비율 (판매가 기준, 예시)
 
-export const monthlySales = [
+export const monthlySales: MonthlySales[] = [
   { month: "9월", count: 6 },
   { month: "10월", count: 31 },
   { month: "11월", count: 42 },
 ];
 
 // 어드민 성적 인증 대기열 더미
-export type VerificationRequest = {
-  id: string;
-  applicant: string;
-  major: string;
-  courseId: string;
-  grade: string;
-  semester: string; // 화면 표시용 (학기 또는 응시 시기)
-  submittedAt: string;
-};
-
 export const verificationQueue: VerificationRequest[] = [
   { id: "v1", applicant: "이서연", major: "경제학과", courseId: "econ101", grade: "A+", semester: "2025년 2학기", submittedAt: "2026-11-18" },
   { id: "v2", applicant: "김도윤", major: "컴퓨터학과", courseId: "cose213", grade: "A+", semester: "2025년 2학기", submittedAt: "2026-11-18" },
@@ -359,45 +289,3 @@ export const verificationQueue: VerificationRequest[] = [
   { id: "v4", applicant: "최우진", major: "수학과", courseId: "math141", grade: "A+", semester: "2025년 1학기", submittedAt: "2026-11-16" },
   { id: "v5", applicant: "정다은", major: "영어영문학과", courseId: "toeic", grade: "940점", semester: "2026년 10월 응시", submittedAt: "2026-11-16" },
 ];
-
-export function getCourse(id: string) {
-  return courses.find((c) => c.id === id);
-}
-
-export function getInstructor(id: string) {
-  return instructors.find((i) => i.id === id);
-}
-
-export function getLecture(id: string) {
-  return lectures.find((l) => l.id === id);
-}
-
-export function getLecturesByCourse(courseId: string) {
-  return lectures
-    .filter((l) => l.courseId === courseId)
-    .sort((a, b) => b.sales - a.sales);
-}
-
-export function getReviews(lectureId: string) {
-  return reviews.filter((r) => r.lectureId === lectureId);
-}
-
-/** 목록·이동 링크에 쓰는 과목 이름. 대학 수업은 학수번호와 교수님까지 붙인다. */
-export function courseLabel(course: Course) {
-  return course.kind === "major"
-    ? `${course.code} ${course.name}, ${course.professor} 교수님`
-    : course.name;
-}
-
-/** 과목별 강의 수와 최저가 */
-export function courseStats(courseId: string) {
-  const ls = lectures.filter((l) => l.courseId === courseId);
-  return {
-    lectureCount: ls.length,
-    minPrice: ls.length ? Math.min(...ls.map((l) => l.price)) : null,
-  };
-}
-
-export function totalMinutes(lecture: Lecture) {
-  return lecture.chapters.reduce((sum, c) => sum + c.minutes, 0);
-}

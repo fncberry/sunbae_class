@@ -1,3 +1,21 @@
+import type { Course, Lecture } from "./types";
+
+/** 목록·이동 링크에 쓰는 과목 이름. 대학 수업은 학수번호와 교수님까지 붙인다. */
+export function courseLabel(course: Course) {
+  return course.kind === "major"
+    ? `${course.code} ${course.name}, ${course.professor} 교수님`
+    : course.name;
+}
+
+/** 운영자 표 같은 좁은 칸용 짧은 과목 이름 */
+export function courseShortLabel(course: Course) {
+  return course.kind === "major" ? `${course.code} ${course.name} (${course.professor})` : course.name;
+}
+
+export function totalMinutes(lecture: Pick<Lecture, "chapters">) {
+  return lecture.chapters.reduce((sum, c) => sum + c.minutes, 0);
+}
+
 export function won(amount: number) {
   return `${amount.toLocaleString("ko-KR")}원`;
 }

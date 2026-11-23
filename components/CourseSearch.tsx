@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import type { Course } from "@/lib/mock-data";
+import type { Course } from "@/lib/types";
 
 type CourseWithCount = Course & { lectureCount: number };
 
