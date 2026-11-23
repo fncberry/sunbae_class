@@ -15,6 +15,10 @@ export type CurrentUser = {
   role: Enums<"user_role">;
   studentId: string | null;
   major: string | null;
+  /** 실명. 본인·운영자만 */
+  name: string | null;
+  /** 서비스 안에서 보이는 이름 */
+  nickname: string | null;
   /** 학번·학과·약관 동의를 마쳤는지 */
   onboarded: boolean;
 };
@@ -28,7 +32,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, email, role, student_id, major, onboarded_at")
+    .select("id, email, role, student_id, major, name, nickname, onboarded_at")
     .eq("id", data.claims.sub)
     .maybeSingle();
   if (!profile) return null;
@@ -39,6 +43,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     role: profile.role,
     studentId: profile.student_id,
     major: profile.major,
+    name: profile.name,
+    nickname: profile.nickname,
     onboarded: profile.onboarded_at !== null,
   };
 });
