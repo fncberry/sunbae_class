@@ -1,159 +1,180 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { Upload } from "lucide-react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { requireUser } from "@/lib/auth";
-import { getMyInstructorDashboard } from "@/lib/data";
-import { courseLabel, instructorMeta, won } from "@/lib/format";
+import { listCourses } from "@/lib/data";
+import { courseLabel, courseShortLabel, instructorMeta, won } from "@/lib/format";
+import { getInstructorCenter, type MyVerification } from "@/lib/instructor-center";
+import { admissionLabel } from "@/lib/onboarding";
+import { ApplyForm, type CourseOption } from "./ApplyForm";
+import { LECTURE_STATUS_TEXT } from "./status";
 
 export const metadata: Metadata = { title: "강사 센터 | 선배클래스", robots: { index: false } };
 
 export default function InstructorPage() {
   return (
     <Suspense fallback={<div className="min-h-screen" aria-busy="true" />}>
-      <InstructorDashboard />
+      <InstructorCenter />
     </Suspense>
   );
 }
 
-async function InstructorDashboard() {
-  await requireUser("/instructor");
-  // TODO(4단계): 로그인한 사용자의 instructors 행 기준으로 교체. 강사가 아니면 지원 화면을 보여준다.
-  const {
-    instructor: me,
-    verifiedCourse,
-    lectures: myLectures,
-    monthlySales,
-    share: instructorShare,
-  } = await getMyInstructorDashboard();
-  const mainPrice = myLectures[0]?.price ?? 0;
-  const thisMonth = monthlySales[monthlySales.length - 1];
-  const earlier = monthlySales.slice(0, -1);
-  const expectedPayout = Math.round(thisMonth.count * mainPrice * instructorShare);
+const VERIFICATION_STATUS: Record<MyVerification["status"], string> = {
+  pending: "확인 중",
+  approved: "인증됨",
+  rejected: "반려",
+};
+
+function verificationCourse(v: MyVerification) {
+  if (v.course) return courseShortLabel(v.course);
+  if (v.requested) return `${v.requested.code} ${v.requested.name} (${v.requested.professor})`;
+  return "과목 정보 없음";
+}
+
+async function InstructorCenter() {
+  const user = await requireUser("/instructor");
+  const [center, courses] = await Promise.all([getInstructorCenter(user.id), listCourses()]);
+  const { instructor, verifications, approvedCourses, lectures } = center;
+
+  // 이미 인증됐거나 확인 중인 과목은 다시 고를 수 없다
+  const blocked = new Map<string, string>();
+  for (const v of verifications) {
+    if (!v.course) continue;
+    if (v.status === "approved") blocked.set(v.course.id, "인증됨");
+    else if (v.status === "pending" && !blocked.has(v.course.id)) blocked.set(v.course.id, "확인 중");
+  }
+  const options: CourseOption[] = courses.map((c) => ({
+    id: c.id,
+    kind: c.kind,
+    label: courseLabel(c),
+    blocked: blocked.get(c.id),
+  }));
+  const courseById = new Map(courses.map((c) => [c.id, c]));
+
+  // 공개 표시 이름: 닉네임 + 학과 NN학번 (실명은 보이지 않는다)
+  const publicName = instructor?.name ?? user.nickname ?? "";
+  const publicMeta = instructor
+    ? instructorMeta({ major: instructor.major, admissionYear: instructor.admission_year })
+    : [user.major, user.studentId ? admissionLabel(user.studentId) : null].filter(Boolean).join(" ");
 
   return (
     <DashboardShell
       area="강사 센터"
       nav={[
-        { label: "요약", href: "/instructor", active: true },
+        { label: "성적 인증", href: "/instructor#verify", active: true },
         { label: "내 강의", href: "/instructor#lectures" },
-        { label: "강의 올리기", href: "/instructor#upload" },
-        { label: "정산 내역", href: "/instructor" },
       ]}
     >
       <div className="max-w-5xl px-8 py-12">
-        <p className="mb-6 rounded-ui bg-wash px-4 py-3 text-sm text-ink-soft">
-          예시 화면이에요. 강사 지원과 성적 인증은 다음 단계에서 열려요.
-        </p>
-        <h1 className="font-serif text-3xl font-bold">{me.name}님의 강사 센터</h1>
-        <p className="mt-2 text-ink-soft">
-          {instructorMeta(me)}
+        <h1 className="font-serif text-3xl font-bold">{instructor ? `${publicName}님의 강사 센터` : "강사 지원"}</h1>
+        <p className="mt-2 max-w-[62ch] leading-relaxed text-ink-soft">
+          {instructor
+            ? `강의 페이지에는 ${publicName}(${publicMeta})로 보여요. 실명은 보이지 않아요.`
+            : "같은 과목, 같은 교수님 수업에서 받은 성적을 인증하면 그 과목 강의를 올릴 수 있어요."}
         </p>
 
-        <dl className="mt-10 grid border-y border-rule md:grid-cols-3">
-          <div className="py-6 md:pr-8">
-            <dt className="text-sm text-ink-soft">인증된 과목</dt>
-            <dd className="mt-2 flex items-center gap-4">
-              <span className="text-lg font-semibold">
-                {verifiedCourse.code} {verifiedCourse.name}
-              </span>
-              <VerifiedBadge grade={me.grade} />
-            </dd>
-            <dd className="mt-1 text-sm text-ink-soft">{me.proof}</dd>
-          </div>
-          <div className="border-rule py-6 md:border-l md:px-8">
-            <dt className="text-sm text-ink-soft">{thisMonth.month} 판매</dt>
-            <dd className="mt-2 text-3xl font-semibold">{thisMonth.count}건</dd>
-            <dd className="mt-1 text-sm text-ink-soft">
-              {earlier.map((m) => `${m.month} ${m.count}건`).join(", ")}
-            </dd>
-          </div>
-          <div className="border-rule py-6 md:border-l md:pl-8">
-            <dt className="text-sm text-ink-soft">정산 예정 금액</dt>
-            <dd className="mt-2 text-3xl font-semibold">{won(expectedPayout)}</dd>
-            <dd className="mt-1 text-sm text-ink-soft">
-              판매가의 {Math.round(instructorShare * 100)}%, 기말고사가 끝나고 환불 기간이 지나면 확정돼요
-            </dd>
-          </div>
-        </dl>
-
-        <section id="lectures" className="mt-14">
-          <h2 className="font-serif text-xl font-bold">내 강의</h2>
-          <table className="mt-4 w-full text-[15px]">
-            <thead className="text-left text-sm text-ink-soft">
-              <tr className="border-b border-ink">
-                <th className="py-2.5 font-normal">강의</th>
-                <th className="py-2.5 text-right font-normal">가격</th>
-                <th className="py-2.5 text-right font-normal">판매</th>
-                <th className="py-2.5 text-right font-normal">평점</th>
-                <th className="py-2.5 pl-8 font-normal">상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myLectures.map((l) => (
-                <tr key={l.id} className="border-b border-rule">
-                  <td className="py-4 pr-4">
-                    <Link href={`/lectures/${l.id}`} className="underline-offset-4 hover:underline">{l.title}</Link>
-                  </td>
-                  <td className="py-4 text-right">{won(l.price)}</td>
-                  <td className="py-4 text-right">{l.sales}건</td>
-                  <td className="py-4 text-right">{l.rating}</td>
-                  <td className="py-4 pl-8">{l.status}</td>
-                </tr>
+        <section id="verify" className="mt-12 scroll-mt-8">
+          <h2 className="font-serif text-xl font-bold">성적 인증</h2>
+          {verifications.length > 0 && (
+            <ul className="mt-4 border-t border-ink">
+              {verifications.map((v) => (
+                <li key={v.id} className="grid gap-x-6 gap-y-1 border-b border-rule py-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <div>
+                    <p className="font-medium">{verificationCourse(v)}</p>
+                    <p className="mt-0.5 text-sm text-ink-soft">
+                      {v.semester} 수강, {v.grade}
+                    </p>
+                    {v.status === "rejected" && v.rejectReason && (
+                      <p className="mt-2 text-sm">반려 사유: {v.rejectReason}</p>
+                    )}
+                    {v.status === "approved" && v.proofText && <p className="mt-2 text-sm text-ink-soft">{v.proofText}</p>}
+                  </div>
+                  <div className="order-first sm:order-none sm:text-right">
+                    {v.status === "approved" ? (
+                      <VerifiedBadge grade={v.grade} />
+                    ) : (
+                      <span className="text-sm font-semibold">
+                        {VERIFICATION_STATUS[v.status]}
+                      </span>
+                    )}
+                    {v.status === "pending" && <p className="mt-0.5 text-sm text-ink-faint">보통 1~2일 걸려요</p>}
+                  </div>
+                </li>
               ))}
-              <tr className="border-b border-rule text-ink-soft">
-                <td className="py-4 pr-4">자료구조 중간 복습: 정렬·탐색</td>
-                <td className="py-4 text-right">{won(3900)}</td>
-                <td className="py-4 text-right">-</td>
-                <td className="py-4 text-right">-</td>
-                <td className="py-4 pl-8">검수 중, 1~2일 걸려요</td>
-              </tr>
-            </tbody>
-          </table>
+            </ul>
+          )}
+
+          {verifications.length > 0 && <h3 className="mt-10 font-semibold">다른 과목 신청하기</h3>}
+          <div className={verifications.length > 0 ? "mt-4" : "mt-6"}>
+            <ApplyForm userId={user.id} courses={options} />
+          </div>
         </section>
 
-        <section id="upload" className="mt-14">
-          <h2 className="font-serif text-xl font-bold">강의 올리기</h2>
-          <p className="mt-1 text-ink-soft">
-            성적이나 점수를 인증한 과목만 올릴 수 있어요. 올리면 운영진이 확인한 뒤 공개돼요.
-          </p>
-
-          <div className="mt-8 grid max-w-3xl gap-6 md:grid-cols-[minmax(0,1fr)_160px]">
-            <label className="block text-sm">
-              <span className="font-medium">과목</span>
-              <select className="mt-2 h-11 w-full rounded-ui border border-ink-faint bg-paper px-3">
-                <option>{courseLabel(verifiedCourse)}</option>
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="font-medium">가격 (원)</span>
-              <input defaultValue="5900" inputMode="numeric" className="mt-2 h-11 w-full rounded-ui border border-ink-faint px-3" />
-            </label>
-            <label className="block text-sm md:col-span-2">
-              <span className="font-medium">강의 제목</span>
-              <input
-                placeholder="예: 자료구조 기말 정리, 트리와 그래프"
-                className="mt-2 h-11 w-full rounded-ui border border-ink-faint px-3 placeholder:text-ink-faint"
-              />
-            </label>
-            <div className="md:col-span-2">
-              <span className="text-sm font-medium">영상 파일</span>
-              <label className="mt-2 flex cursor-pointer items-center gap-4 rounded-ui border border-dashed border-ink-faint px-5 py-6 hover:border-ink">
-                <Upload size={20} className="text-ink-soft" aria-hidden />
-                <span className="text-sm">
-                  <span className="font-medium">파일 선택</span>
-                  <span className="text-ink-soft"> 또는 여기로 끌어다 놓기. 강의별로 나눠 올리면 첫 번째 영상이 무료 맛보기가 돼요.</span>
-                </span>
-                <input type="file" accept="video/*" multiple className="sr-only" />
-              </label>
-              <p className="mt-2 text-sm text-ink-soft">기출문제 원본이나 교수님 강의자료를 그대로 쓰면 공개되지 않아요.</p>
-            </div>
+        <section id="lectures" className="mt-16 scroll-mt-8">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 className="font-serif text-xl font-bold">내 강의</h2>
+            {approvedCourses.length > 0 && (
+              <Link href="/instructor/lectures/new" className="text-sm font-medium underline underline-offset-4">
+                새 강의 만들기
+              </Link>
+            )}
           </div>
-          <button type="button" className="mt-8 rounded-ui bg-ink px-5 py-3 text-sm font-semibold text-paper hover:bg-ink/85">
-            검수 요청 보내기
-          </button>
+
+          {approvedCourses.length === 0 ? (
+            <p className="mt-3 text-ink-soft">성적 인증이 승인되면 그 과목 강의를 만들 수 있어요.</p>
+          ) : lectures.length === 0 ? (
+            <p className="mt-3 text-ink-soft">
+              아직 만든 강의가 없어요.{" "}
+              <Link href="/instructor/lectures/new" className="text-ink underline underline-offset-4">
+                첫 강의 초안 만들기
+              </Link>
+            </p>
+          ) : (
+            <table className="mt-4 w-full text-[15px]">
+              <thead className="text-left text-sm text-ink-soft">
+                <tr className="border-b border-ink">
+                  <th className="py-2.5 font-normal">강의</th>
+                  <th className="py-2.5 text-right font-normal">가격</th>
+                  <th className="py-2.5 text-right font-normal">판매</th>
+                  <th className="py-2.5 pl-8 font-normal">상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lectures.map((l) => {
+                  const course = courseById.get(l.courseId);
+                  const editable = l.status === "draft" || l.status === "reviewing" || l.status === "rejected";
+                  return (
+                    <tr key={l.id} className="border-b border-rule align-top">
+                      <td className="py-4 pr-4">
+                        <Link
+                          href={l.status === "on_sale" ? `/lectures/${l.id}` : `/instructor/lectures/${l.id}`}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          {l.title}
+                        </Link>
+                        {course && <span className="mt-0.5 block text-sm text-ink-soft">{courseShortLabel(course)}</span>}
+                      </td>
+                      <td className="py-4 text-right">{won(l.price)}</td>
+                      <td className="py-4 text-right">{l.status === "on_sale" ? `${l.sales}건` : "-"}</td>
+                      <td className="py-4 pl-8">
+                        <span className={l.status === "rejected" ? "font-semibold" : ""}>{LECTURE_STATUS_TEXT[l.status]}</span>
+                        {l.status === "rejected" && l.rejectReason && (
+                          <span className="mt-0.5 block max-w-[28ch] text-sm text-ink-soft">{l.rejectReason}</span>
+                        )}
+                        {editable && (
+                          <Link href={`/instructor/lectures/${l.id}`} className="mt-0.5 block text-sm text-ink-soft underline underline-offset-4 hover:text-ink">
+                            {l.status === "rejected" ? "고쳐서 다시 요청" : "고치기"}
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </section>
       </div>
     </DashboardShell>
