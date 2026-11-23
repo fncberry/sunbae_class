@@ -149,7 +149,8 @@ check("수강 안 한 강의 진도 기록 불가", !!(await rejects("authentica
 check("남의 진도 안 보임", (await one("authenticated", S2, "select count(*)::int n from chapter_progress")).n === 0);
 
 console.log("\n[헬퍼 함수]");
-check("트리거 함수 RPC 직접 호출 불가", !!(await rejects("authenticated", S1, "select public.sync_review_counters()")));
+check("트리거 함수 직접 호출 불가", !!(await rejects("authenticated", S1, "select private.sync_review_counters()")));
+check("헬퍼가 public(API 노출 스키마)에 없음", (await one("postgres", null, "select count(*)::int n from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'")).n === 0);
 
 console.log(`\n결과: ${pass} 통과, ${fail} 실패`);
 process.exit(fail ? 1 : 0);

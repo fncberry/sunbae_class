@@ -3,7 +3,7 @@ import { Upload } from "lucide-react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { getMyInstructorDashboard } from "@/lib/data";
-import { courseLabel, won } from "@/lib/format";
+import { courseLabel, instructorMeta, won } from "@/lib/format";
 
 export default async function InstructorPage() {
   const {
@@ -31,7 +31,7 @@ export default async function InstructorPage() {
       <div className="max-w-5xl px-8 py-12">
         <h1 className="font-serif text-3xl font-bold">{me.name}님의 강사 센터</h1>
         <p className="mt-2 text-ink-soft">
-          {me.major} {me.admissionYear}학번
+          {instructorMeta(me)}
         </p>
 
         <dl className="mt-10 grid border-y border-rule md:grid-cols-3">

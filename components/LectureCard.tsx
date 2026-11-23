@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { LectureWithRelations } from "@/lib/types";
-import { courseLabel, minutesLabel, totalMinutes, won } from "@/lib/format";
+import { courseLabel, instructorMeta, minutesLabel, totalMinutes, won } from "@/lib/format";
 import { VerifiedBadge } from "./VerifiedBadge";
 
 /** 강의 한 줄. 목록에서 카드 대신 행으로 쓴다. */
@@ -26,7 +26,7 @@ export function LectureCard({ lecture, showCourse = true }: { lecture: LectureWi
         <div className="flex items-center gap-4 md:block">
           <p className="font-medium">{instructor.name}</p>
           <p className="text-sm text-ink-soft md:mt-0.5">
-            {instructor.major} {instructor.admissionYear}학번
+            {instructorMeta(instructor)}
           </p>
           <div className="md:mt-3">
             <VerifiedBadge grade={instructor.grade} />
