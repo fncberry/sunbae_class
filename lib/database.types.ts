@@ -222,12 +222,20 @@ export type Database = {
       }
       grade_verifications: {
         Row: {
-          course_id: string
+          course_id: string | null
           grade: string
           id: string
           instructor_id: string
+          proof_path: string | null
           proof_text: string | null
           reject_reason: string | null
+          requested_code: string | null
+          requested_department: string | null
+          requested_group: string | null
+          requested_name: string | null
+          requested_professor: string | null
+          requested_semester: string | null
+          requested_track: Database["public"]["Enums"]["course_track"] | null
           reviewed_at: string | null
           reviewed_by: string | null
           semester_label: string
@@ -235,12 +243,20 @@ export type Database = {
           submitted_at: string
         }
         Insert: {
-          course_id: string
+          course_id?: string | null
           grade: string
           id?: string
           instructor_id: string
+          proof_path?: string | null
           proof_text?: string | null
           reject_reason?: string | null
+          requested_code?: string | null
+          requested_department?: string | null
+          requested_group?: string | null
+          requested_name?: string | null
+          requested_professor?: string | null
+          requested_semester?: string | null
+          requested_track?: Database["public"]["Enums"]["course_track"] | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           semester_label: string
@@ -248,12 +264,20 @@ export type Database = {
           submitted_at?: string
         }
         Update: {
-          course_id?: string
+          course_id?: string | null
           grade?: string
           id?: string
           instructor_id?: string
+          proof_path?: string | null
           proof_text?: string | null
           reject_reason?: string | null
+          requested_code?: string | null
+          requested_department?: string | null
+          requested_group?: string | null
+          requested_name?: string | null
+          requested_professor?: string | null
+          requested_semester?: string | null
+          requested_track?: Database["public"]["Enums"]["course_track"] | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           semester_label?: string
@@ -331,6 +355,7 @@ export type Database = {
           instructor_id: string
           price: number
           rating_sum: number
+          reject_reason: string | null
           review_count: number
           sales_count: number
           status: Database["public"]["Enums"]["lecture_status"]
@@ -349,6 +374,7 @@ export type Database = {
           instructor_id: string
           price: number
           rating_sum?: number
+          reject_reason?: string | null
           review_count?: number
           sales_count?: number
           status?: Database["public"]["Enums"]["lecture_status"]
@@ -367,6 +393,7 @@ export type Database = {
           instructor_id?: string
           price?: number
           rating_sum?: number
+          reject_reason?: string | null
           review_count?: number
           sales_count?: number
           status?: Database["public"]["Enums"]["lecture_status"]

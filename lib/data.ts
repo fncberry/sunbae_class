@@ -1,23 +1,19 @@
 // 화면이 데이터를 가져가는 유일한 입구. 함수 이름과 반환 타입을 유지해야 페이지·컴포넌트를 고치지 않아도 된다.
 //
 // - 공개 카탈로그: Supabase(anon 역할, RLS 적용)에서 읽고 "use cache" + cacheTag("catalog")로 캐시한다.
-//   강의가 승인·수정되면 revalidateTag("catalog")로 갱신한다.
-// - 강사 센터·운영자: 로그인한 사람마다 다른 데이터라 3단계(인증)에서 Supabase로 옮긴다. 지금은 목업.
+//   강의·인증이 승인되면 서버 액션에서 updateTag("catalog")로 갱신한다.
+// - 강사 센터·운영자 화면은 사람마다 다른 데이터라 lib/instructor-center.ts, lib/admin.ts에서 캐시 없이 읽는다.
 
 import { cacheLife, cacheTag } from "next/cache";
-import * as mock from "./mock-data";
 import { publicSupabase } from "./supabase/public";
 import type { Tables } from "./database.types";
 import type {
   Course,
   Instructor,
   InstructorProfile,
-  Lecture,
   LectureStatus,
   LectureWithRelations,
-  MonthlySales,
   Review,
-  VerificationRequest,
 } from "./types";
 
 // ─── DB 행 → 화면 타입 ──────────────────────────────────────
@@ -32,7 +28,7 @@ const STATUS_LABEL: Record<Tables<"lectures">["status"], LectureStatus> = {
 
 const kstDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" });
 
-function toCourse(row: Tables<"courses">): Course {
+export function toCourse(row: Tables<"courses">): Course {
   return {
     id: row.id,
     kind: row.kind,
@@ -80,7 +76,7 @@ function toLecture(row: LectureRow): LectureWithRelations | null {
     major: row.instructor.major,
     admissionYear: row.instructor.admission_year,
     grade: verification.grade,
-    verifiedCourseId: verification.course_id,
+    verifiedCourseId: row.course_id,
     verifiedSemester: verification.semester_label,
     proof: verification.proof_text ?? "",
     bio: row.instructor.bio,
@@ -304,43 +300,4 @@ export async function getInstructorProfile(id: string): Promise<InstructorProfil
       lectureCount: lectures.length,
     },
   };
-}
-
-// ─── 강사 센터 (로그인한 강사 기준, 캐시하지 않음) ──────────────
-// TODO(3단계 인증): 세션의 user_id → instructors → lectures·grade_verifications·orders로 교체
-
-export type InstructorDashboard = {
-  instructor: Instructor;
-  verifiedCourse: Course;
-  lectures: Lecture[];
-  monthlySales: MonthlySales[];
-  share: number; // 강사 정산 비율
-};
-
-/** 목업: 로그인 세션 대신 고정된 강사(정하윤)를 돌려준다. */
-export async function getMyInstructorDashboard(): Promise<InstructorDashboard> {
-  const instructor = mock.instructors.find((i) => i.id === mock.currentInstructorId);
-  if (!instructor) throw new Error("로그인한 강사를 찾을 수 없어요");
-  const verifiedCourse = mock.courses.find((c) => c.id === instructor.verifiedCourseId);
-  if (!verifiedCourse) throw new Error("인증된 과목을 찾을 수 없어요");
-  return {
-    instructor,
-    verifiedCourse,
-    lectures: mock.lectures.filter((l) => l.instructorId === instructor.id),
-    monthlySales: mock.monthlySales,
-    share: mock.instructorShare,
-  };
-}
-
-// ─── 운영자 (캐시하지 않음) ─────────────────────────────────
-// TODO(3단계 인증): 운영자 세션으로 grade_verifications(status='pending') 조회로 교체
-
-export type VerificationRow = VerificationRequest & { course: Course };
-
-export async function listVerificationRequests(): Promise<VerificationRow[]> {
-  return mock.verificationQueue.map((v) => {
-    const course = mock.courses.find((c) => c.id === v.courseId);
-    if (!course) throw new Error(`인증 신청 ${v.id}의 과목이 없어요`);
-    return { ...v, course };
-  });
 }

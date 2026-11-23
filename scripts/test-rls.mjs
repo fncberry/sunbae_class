@@ -24,6 +24,29 @@ await db.exec(`
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
   alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+
+  -- Supabase Storage 흉내: 버킷·객체 테이블, 경로 함수. 실제처럼 objects에 RLS가 켜져 있다
+  create schema storage;
+  create table storage.buckets (
+    id text primary key, name text not null, public boolean default false,
+    file_size_limit bigint, allowed_mime_types text[]
+  );
+  create table storage.objects (
+    id uuid primary key default gen_random_uuid(),
+    bucket_id text references storage.buckets (id),
+    name text not null, owner uuid, created_at timestamptz default now(),
+    unique (bucket_id, name)
+  );
+  alter table storage.objects enable row level security;
+  create function storage.foldername(name text) returns text[] language sql immutable as $$
+    select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
+  $$;
+  create function storage.extension(name text) returns text language sql immutable as $$
+    select split_part(name, '.', -1)
+  $$;
+  grant usage on schema storage to anon, authenticated, service_role;
+  grant all on storage.objects to anon, authenticated, service_role;
+  grant select on storage.buckets to anon, authenticated, service_role;
 `);
 
 for (const f of migrationFiles) await db.exec(readFileSync(new URL(f, migrationsDir), "utf8"));
@@ -123,17 +146,36 @@ check("남 이름으로 후기 작성 불가", !!(await rejects("authenticated",
 check("남의 후기 수정 안 됨", (await as("authenticated", S2, "update reviews set body='x' where user_id=$1 returning id", [S1])).rows.length === 0);
 
 console.log("\n[강사 지원 → 인증 → 강의 올리기]");
-await as("authenticated", T1, "insert into instructors (id, user_id, name, major, admission_year) values ('t1',$1,'테스트','컴퓨터학과',24)", [T1]);
-check("강사 프로필은 한 사람당 하나", !!(await rejects("authenticated", T1, "insert into instructors (id, user_id, name, major) values ('t1b',$1,'x','x')", [T1])));
-check("남의 user_id로 강사 프로필 생성 불가", !!(await rejects("authenticated", S2, "insert into instructors (id, user_id, name, major) values ('t2',$1,'x','x')", [T1])));
+// 강사 지원은 가입 마무리(온보딩)를 끝낸 사람만. 이 테스트에서는 SQL로 바로 마친 상태로 둔다
+check("온보딩 전에는 강사 프로필 못 만듦", !!(await rejects("authenticated", T1, "insert into instructors (user_id) values ($1)", [T1])));
+await as("postgres", null, "update profiles set name='김강사', nickname='알고선배', student_id='2024320099', major='컴퓨터학과', terms_agreed_at=now(), onboarded_at=now() where id=$1", [T1]);
+check("이름·학과를 직접 정해서 강사 프로필 못 만듦", !!(await rejects("authenticated", T1, "insert into instructors (user_id, name, major) values ($1,'정하윤','의예과')", [T1])));
+const t1Inst = await one("authenticated", T1, "insert into instructors (user_id, bio) values ($1, ' 알고리즘 A+ ') returning id, name, major, admission_year, bio", [T1]);
+check("강사 이름은 닉네임, 학과·학번은 프로필에서", t1Inst.name === "알고선배" && t1Inst.major === "컴퓨터학과" && t1Inst.admission_year === 24 && t1Inst.bio === "알고리즘 A+", JSON.stringify(t1Inst));
+// 아래 시나리오를 읽기 쉽게 id를 't1'로 바꿔 둔다 (운영자 SQL)
+await as("postgres", null, "update instructors set id='t1' where user_id=$1", [T1]);
+check("강사 프로필은 한 사람당 하나", !!(await rejects("authenticated", T1, "insert into instructors (user_id) values ($1)", [T1])));
+check("남의 user_id로 강사 프로필 생성 불가", !!(await rejects("authenticated", S2, "insert into instructors (user_id) values ($1)", [T1])));
+check("강사는 소개만 고칠 수 있음", !!(await rejects("authenticated", T1, "update instructors set name='운영진' where id='t1'")) && (await as("authenticated", T1, "update instructors set bio='새 소개' where id='t1' returning id")).rows.length === 1);
 check("인증 전에는 강의 못 올림", !!(await rejects("authenticated", T1, "insert into lectures (id, course_id, instructor_id, title, price, status) values ('t1-algo','cose214','t1','알고리즘 정리',5900,'reviewing')")));
-await as("authenticated", T1, "insert into grade_verifications (instructor_id, course_id, grade, semester_label) values ('t1','cose214','A+','2025-2학기')");
+// 캡처를 본인 폴더에 먼저 올리고, 그 파일 이름(신청 id)으로 신청한다
+const V1 = "aaaaaaaa-0000-4000-8000-000000000001";
+await as("authenticated", T1, "insert into storage.objects (bucket_id, name, owner) values ('grade-proofs', $1, $2)", [`${T1}/${V1}.png`, T1]);
+check("캡처 없이 신청 불가", !!(await rejects("authenticated", T1, "insert into grade_verifications (id, instructor_id, course_id, grade, semester_label) values (gen_random_uuid(),'t1','cose214','A+','2025-2학기')")));
+await as("authenticated", T1, "insert into grade_verifications (id, instructor_id, course_id, grade, semester_label, proof_path) values ($1,'t1','cose214','A+','2025-2학기',$2)", [V1, `${T1}/${V1}.png`]);
 check("신청은 pending으로 생성", (await one("authenticated", T1, "select status from grade_verifications where instructor_id='t1'")).status === "pending");
 check("신청자가 직접 승인 불가", !!(await rejects("authenticated", T1, "update grade_verifications set status='approved' where instructor_id='t1'")) || (await as("authenticated", T1, "update grade_verifications set status='approved' where instructor_id='t1' returning id")).rows.length === 0);
 check("남의 강사 프로필로 신청 불가", !!(await rejects("authenticated", S2, "insert into grade_verifications (instructor_id, course_id, grade, semester_label) values ('t1','cose213','A+','x')")));
 check("pending 신청은 익명에게 안 보임", (await one("anon", null, "select count(*)::int n from grade_verifications where instructor_id='t1'")).n === 0);
 check("운영자는 대기열 6건 확인", (await one("authenticated", A1, "select count(*)::int n from grade_verifications where status='pending'")).n === 6);
-await as("authenticated", A1, "update grade_verifications set status='approved', proof_text='확인했어요', reviewed_by=$1, reviewed_at=now() where instructor_id='t1'", [A1]);
+check("처리자·처리 시각은 직접 못 씀", !!(await rejects("authenticated", A1, "update grade_verifications set reviewed_by=$1 where instructor_id='t1'", [A1])));
+check("인증 문구 없이 승인 불가", !!(await rejects("authenticated", A1, "update grade_verifications set status='approved' where instructor_id='t1'")));
+await as("authenticated", A1, "update grade_verifications set status='approved', proof_text='2025년 2학기 알고리즘 A+ 확인' where instructor_id='t1'");
+const v1 = await one("postgres", null, "select reviewed_by, reviewed_at from grade_verifications where id=$1", [V1]);
+check("승인하면 처리자·처리 시각이 기록됨", v1.reviewed_by === A1 && v1.reviewed_at !== null, JSON.stringify(v1));
+check("승인되면 역할이 강사로 바뀜", (await one("postgres", null, "select role from profiles where id=$1", [T1])).role === "instructor");
+check("처리된 신청은 다시 바꿀 수 없음", !!(await rejects("authenticated", A1, "update grade_verifications set status='rejected', reject_reason='x' where id=$1", [V1])));
+check("이미 인증된 과목에 다시 신청 불가", !!(await rejects("authenticated", T1, "insert into grade_verifications (id, instructor_id, course_id, grade, semester_label, proof_path) values ($1,'t1','cose214','A+','x',$2)", ["aaaaaaaa-0000-4000-8000-0000000000ff", `${T1}/aaaaaaaa-0000-4000-8000-0000000000ff.png`])));
 check("인증된 과목에 강의 올리기 (검수 중)", (await as("authenticated", T1, "insert into lectures (id, course_id, instructor_id, title, price, status) values ('t1-algo','cose214','t1','알고리즘 정리',5900,'reviewing') returning id")).rows.length === 1);
 check("인증 안 된 과목엔 못 올림", !!(await rejects("authenticated", T1, "insert into lectures (id, course_id, instructor_id, title, price, status) values ('t1-ds','cose213','t1','x',5900,'reviewing')")));
 check("남의 이름으로 강의 못 올림", !!(await rejects("authenticated", T1, "insert into lectures (id, course_id, instructor_id, title, price, status) values ('t1-x','cose213','jung','x',5900,'reviewing')")));
@@ -148,6 +190,74 @@ check("본인 강의에 챕터 추가", (await one("authenticated", T1, "select 
 check("운영자가 판매 시작", (await as("authenticated", A1, "update lectures set status='on_sale' where id='t1-algo' returning id")).rows.length === 1);
 check("판매 중이 되면 익명에게 보임", (await one("anon", null, "select count(*)::int n from lectures where id='t1-algo'")).n === 1);
 check("판매 중 강의 챕터는 강사가 못 고침", (await as("authenticated", T1, "update chapters set title='x' where lecture_id='t1-algo' returning id")).rows.length === 0);
+
+console.log("\n[성적 인증: 캡처 파일]");
+{
+  const obj = (uid, sql, params) => as("authenticated", uid, sql, params);
+  check("남의 폴더에 캡처 업로드 불가", !!(await rejects("authenticated", S2, "insert into storage.objects (bucket_id, name, owner) values ('grade-proofs', $1, $2)", [`${T1}/evil.png`, S2])));
+  check("허용 안 된 파일 형식 불가", !!(await rejects("authenticated", T1, "insert into storage.objects (bucket_id, name, owner) values ('grade-proofs', $1, $2)", [`${T1}/x.exe`, T1])));
+  check("남의 캡처는 안 보임", (await obj(S2, "select count(*)::int n from storage.objects where bucket_id='grade-proofs'")).rows[0].n === 0);
+  check("본인 캡처는 보임", (await obj(T1, "select count(*)::int n from storage.objects where name=$1", [`${T1}/${V1}.png`])).rows[0].n === 1);
+  check("운영자는 캡처 조회 가능", (await obj(A1, "select count(*)::int n from storage.objects where name=$1", [`${T1}/${V1}.png`])).rows[0].n === 1);
+  check("익명은 캡처 조회 불가", !!(await rejects("anon", null, "select * from storage.objects")) || (await one("anon", null, "select count(*)::int n from storage.objects")).n === 0);
+  check("신청자는 캡처를 지울 수 없음", (await obj(T1, "delete from storage.objects where name=$1 returning id", [`${T1}/${V1}.png`])).rows.length === 0);
+  // 승인 뒤 운영자가 캡처를 지우고 경로를 비운다
+  check("결정 뒤 운영자가 캡처 삭제", (await obj(A1, "delete from storage.objects where name=$1 returning id", [`${T1}/${V1}.png`])).rows.length === 1);
+  await obj(A1, "update grade_verifications set proof_path=null where id=$1", [V1]);
+  const after = await one("postgres", null, "select proof_path, status, reviewed_by from grade_verifications where id=$1", [V1]);
+  check("캡처를 지워도 승인 기록은 남음", after.proof_path === null && after.status === "approved" && after.reviewed_by === A1, JSON.stringify(after));
+  check("남의 경로로 신청 불가", !!(await rejects("authenticated", T1, "insert into grade_verifications (id, instructor_id, course_id, grade, semester_label, proof_path) values ($1,'t1','cose213','A+','x',$2)", ["aaaaaaaa-0000-4000-8000-000000000002", `${S1}/aaaaaaaa-0000-4000-8000-000000000002.png`])));
+}
+
+console.log("\n[성적 인증: 대기·반려·새 과목]");
+{
+  const apply = async (id, fields, values) => {
+    await as("authenticated", T1, "insert into storage.objects (bucket_id, name, owner) values ('grade-proofs', $1, $2)", [`${T1}/${id}.pdf`, T1]);
+    return as("authenticated", T1, `insert into grade_verifications (id, instructor_id, grade, semester_label, proof_path, ${fields}) values ($1,'t1','A+','2025-2학기',$2, ${values.map((_, i) => `$${i + 3}`).join(",")}) returning id`, [id, `${T1}/${id}.pdf`, ...values]);
+  };
+  const V2 = "aaaaaaaa-0000-4000-8000-000000000003";
+  const V3 = "aaaaaaaa-0000-4000-8000-000000000004";
+  await apply(V2, "course_id", ["cose213"]);
+  check("같은 과목에 대기 중 신청은 하나만", !!(await rejects("authenticated", T1, "insert into grade_verifications (id, instructor_id, course_id, grade, semester_label, proof_path) values ($1,'t1','cose213','A+','x',$2)", [V3, `${T1}/${V3}.pdf`])));
+  check("신청 때 상태·처리자를 정해도 무시됨", (await one("postgres", null, "select status, reviewed_by from grade_verifications where id=$1", [V2])).status === "pending");
+  check("학생이 승인 시도해도 바뀌지 않음", (await as("authenticated", S1, "update grade_verifications set status='approved', proof_text='x' where id=$1 returning id", [V2])).rows.length === 0);
+  check("사유 없이 반려 불가", !!(await rejects("authenticated", A1, "update grade_verifications set status='rejected' where id=$1", [V2])));
+  await as("authenticated", A1, "update grade_verifications set status='rejected', reject_reason='캡처에 교수님 이름이 안 보여요' where id=$1", [V2]);
+  const rej = await one("authenticated", T1, "select status, reject_reason, reviewed_at from grade_verifications where id=$1", [V2]);
+  check("반려 사유는 신청자에게 보임", rej.status === "rejected" && rej.reject_reason.includes("교수님") && rej.reviewed_at !== null, JSON.stringify(rej));
+  check("반려된 과목은 다시 신청 가능", (await apply(V3, "course_id", ["cose213"])).rows.length === 1);
+
+  // 목록에 없는 대학 수업: 직접 적어서 신청 → 운영자가 과목을 만들며 승인
+  const V4 = "aaaaaaaa-0000-4000-8000-000000000005";
+  check("과목도 안 고르고 직접 적지도 않으면 거부", !!(await rejects("authenticated", T1, "insert into grade_verifications (id, instructor_id, grade, semester_label, proof_path) values ($1,'t1','A+','x',$2)", [V4, `${T1}/${V4}.pdf`])));
+  await apply(V4, "requested_code, requested_name, requested_professor, requested_semester, requested_track, requested_group, requested_department",
+    ["COSE341", "운영체제", "오정민", "2025-2학기", "major", "정보대학", "컴퓨터학과"]);
+  const V5 = "aaaaaaaa-0000-4000-8000-000000000006";
+  check("같은 과목 직접 신청도 대기 중엔 하나만 (대소문자 무시)", !!(await rejects("authenticated", T1, "insert into grade_verifications (id, instructor_id, grade, semester_label, proof_path, requested_code, requested_name, requested_professor, requested_semester, requested_track, requested_group) values ($1,'t1','A+','x',$2,'cose341','운영체제','오정민','x','major','정보대학')", [V5, `${T1}/${V5}.pdf`])));
+  check("과목 없이 승인 불가", !!(await rejects("authenticated", A1, "update grade_verifications set status='approved', proof_text='x' where id=$1", [V4])));
+  await as("authenticated", A1, "insert into courses (id, kind, track, code, name, professor, semester, group_name, department, exam_date, exam_label) values ('cose341','major','major','COSE341','운영체제','오정민','2026-2학기','정보대학','컴퓨터학과','2026-12-17','기말고사')");
+  await as("authenticated", A1, "update grade_verifications set course_id='cose341', status='approved', proof_text='2025년 2학기 운영체제 A+ 확인' where id=$1", [V4]);
+  check("새 과목 승인 후 그 과목에 강의 올리기", (await as("authenticated", T1, "insert into lectures (id, course_id, instructor_id, title, price, status) values ('t1-os','cose341','t1','운영체제 기말 정리',5900,'draft') returning id")).rows.length === 1);
+  check("학생은 과목을 만들 수 없음", !!(await rejects("authenticated", S1, "insert into courses (id, kind, track, code, name, professor, semester, group_name, exam_date, exam_label) values ('x9','major','major','X','x','x','x','x','2026-12-01','기말고사')")));
+}
+
+console.log("\n[강의 검수]");
+{
+  await as("authenticated", T1, "update lectures set status='reviewing' where id='t1-os'");
+  check("사유 없이 강의 반려 불가", !!(await rejects("authenticated", A1, "update lectures set status='rejected' where id='t1-os'")));
+  await as("authenticated", A1, "update lectures set status='rejected', reject_reason='0강 맛보기가 없어요' where id='t1-os'");
+  check("강의 반려 사유는 강사에게 보임", (await one("authenticated", T1, "select reject_reason from lectures where id='t1-os'")).reject_reason === "0강 맛보기가 없어요");
+  await as("authenticated", T1, "update lectures set status='draft', reject_reason='승인해 주세요' where id='t1-os'");
+  check("강사는 반려 사유를 못 바꿈", (await one("postgres", null, "select reject_reason from lectures where id='t1-os'")).reject_reason === "0강 맛보기가 없어요");
+  await as("authenticated", T1, "update lectures set status='reviewing' where id='t1-os'");
+  const re = await one("postgres", null, "select status, reject_reason from lectures where id='t1-os'");
+  check("다시 검수 요청하면 지난 사유는 지워짐", re.status === "reviewing" && re.reject_reason === null, JSON.stringify(re));
+  check("강사가 반려 상태로 바꿀 수 없음", !!(await rejects("authenticated", T1, "update lectures set status='rejected', reject_reason='x' where id='t1-os'")));
+}
+
+console.log("\n[강사 공개 프로필]");
+await as("authenticated", T1, "update profiles set nickname='알고마스터' where id=$1", [T1]);
+check("닉네임을 바꾸면 강사 이름도 바뀜", (await one("anon", null, "select name from instructors where id='t1'")).name === "알고마스터");
 
 console.log("\n[영상 접근]");
 await as("service_role", null, `insert into chapter_media (chapter_id, provider, asset_id)
