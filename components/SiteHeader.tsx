@@ -55,7 +55,7 @@ function LoginLink() {
       href="/login"
       className="rounded-ui border border-ink px-4 py-1.5 text-sm font-medium hover:bg-ink hover:text-paper"
     >
-      고려대 메일로 로그인
+      로그인
     </Link>
   );
 }
