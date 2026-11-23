@@ -56,15 +56,21 @@ const T1 = "33333333-3333-3333-3333-333333333333"; // 강사가 될 학생
 const A1 = "44444444-4444-4444-4444-444444444444"; // 운영자
 
 console.log("\n[시드 데이터]");
-check("과목 9개", (await one("anon", null, "select count(*)::int n from courses")).n === 9);
-check("판매 중 강의 6개 (anon)", (await one("anon", null, "select count(*)::int n from lectures")).n === 6);
-check("챕터 33개", (await one("anon", null, "select count(*)::int n from chapters")).n === 33);
+check("과목 17개", (await one("anon", null, "select count(*)::int n from courses")).n === 17);
+check("판매 중 강의 12개 (anon)", (await one("anon", null, "select count(*)::int n from lectures")).n === 12);
+check("챕터 62개", (await one("anon", null, "select count(*)::int n from chapters")).n === 62);
 const ds = await one("anon", null, "select sales_count, review_count, rating_sum, study_group_taken from lectures where id='ds-final-tree-graph'");
 check("카운터 시드값 유지 (판매 112, 후기 38, 스터디 11명)", ds.sales_count === 112 && ds.review_count === 38 && ds.study_group_taken === 11, JSON.stringify(ds));
 check("후기 4개", (await one("anon", null, "select count(*)::int n from reviews")).n === 4);
 
 console.log("\n[익명 사용자]");
-check("승인된 인증만 보임 (6개)", (await one("anon", null, "select count(*)::int n from grade_verifications")).n === 6);
+check("승인된 인증만 보임 (12개)", (await one("anon", null, "select count(*)::int n from grade_verifications")).n === 12);
+
+console.log("\n[전공·교양 구분]");
+const tracks = await one("anon", null, "select count(*) filter (where track = 'major')::int major, count(*) filter (where track = 'liberal')::int liberal, count(*) filter (where kind = 'cert' and track is null)::int cert from courses");
+check("전공 10개, 교양 4개, 자격증은 구분 없음 3개", tracks.major === 10 && tracks.liberal === 4 && tracks.cert === 3, JSON.stringify(tracks));
+check("대학 수업인데 전공/교양이 없으면 거부", !!(await rejects("postgres", null, "insert into courses (id, kind, code, name, professor, semester, group_name, exam_date, exam_label) values ('x1','major','X','x','x','x','x','2026-12-01','기말고사')")));
+check("자격증에 전공/교양을 붙이면 거부", !!(await rejects("postgres", null, "insert into courses (id, kind, name, track, group_name, exam_date, exam_label) values ('x2','cert','x','liberal','x','2026-12-01','시험')")));
 check("profiles 안 보임", (await one("anon", null, "select count(*)::int n from profiles")).n === 0);
 check("orders 조회 불가", !!(await rejects("anon", null, "select * from orders")) || (await one("anon", null, "select count(*)::int n from orders")).n === 0);
 check("강의 직접 추가 불가", !!(await rejects("anon", null, "insert into lectures (id, course_id, instructor_id, title, price) values ('x','cose213','jung','x',1000)")));

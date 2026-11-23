@@ -2,6 +2,9 @@
 
 export type CourseKind = "major" | "cert";
 
+/** 대학 수업의 전공/교양 구분 (kind = "major"일 때만) */
+export type CourseTrack = "major" | "liberal";
+
 /**
  * 강의를 묶는 단위.
  * - major: 대학 수업 (학수번호 + 교수님 분반)
@@ -14,8 +17,9 @@ export type Course = {
   name: string;
   professor?: string; // major만
   semester?: string; // major만
-  group: string; // major: 단과대학 / cert: 분야
-  department?: string; // major: 개설 학과
+  track?: CourseTrack; // major만: 전공/교양
+  group: string; // 전공: 단과대학 / 교양: "교양" / cert: 분야
+  department?: string; // 전공: 개설 학과 / 교양: 교양 영역
   students?: number;
   examDate: string; // 기말고사일 또는 다음 시험일 (환불 기한 기준)
   examLabel: string; // "기말고사" | "시험"
@@ -72,9 +76,6 @@ export type Review = {
   text: string;
   date: string;
 };
-
-/** 과목 목록 화면용: 과목 + 강의 수 + 최저가 */
-export type CatalogCourse = Course & { lectureCount: number; minPrice: number | null };
 
 export type MonthlySales = { month: string; count: number };
 

@@ -9,7 +9,6 @@ import * as mock from "./mock-data";
 import { publicSupabase } from "./supabase/public";
 import type { Tables } from "./database.types";
 import type {
-  CatalogCourse,
   Course,
   Instructor,
   Lecture,
@@ -40,6 +39,8 @@ function toCourse(row: Tables<"courses">): Course {
     name: row.name,
     professor: row.professor ?? undefined,
     semester: row.semester ?? undefined,
+    // 마이그레이션(course_track) 적용 전 DB에서도 동작하도록, 대학 수업에 값이 없으면 전공으로 본다
+    track: row.kind === "major" ? (row.track ?? "major") : undefined,
     group: row.group_name,
     department: row.department ?? undefined,
     students: row.students ?? undefined,
@@ -144,19 +145,6 @@ export async function getCourse(id: string): Promise<Course | null> {
   return data ? toCourse(data) : null;
 }
 
-/** 과목 찾기 화면: 과목마다 판매 중인 강의 수와 최저가를 붙인다. */
-export async function listCatalogCourses(): Promise<CatalogCourse[]> {
-  "use cache";
-  cacheLife("hours");
-  cacheTag("catalog");
-  // anon은 RLS 때문에 판매 중 강의만 보인다
-  const [courses, lectures] = await Promise.all([listCourses(), listOnSaleLectures()]);
-  return courses.map((c) => {
-    const prices = lectures.filter((l) => l.courseId === c.id).map((l) => l.price);
-    return { ...c, lectureCount: prices.length, minPrice: prices.length ? Math.min(...prices) : null };
-  });
-}
-
 /** 판매 중 강의 전체, 판매 수 많은 순 */
 async function listOnSaleLectures(): Promise<LectureWithRelations[]> {
   "use cache";
@@ -173,12 +161,12 @@ async function listOnSaleLectures(): Promise<LectureWithRelations[]> {
   return toLectures(data);
 }
 
-/** 판매 수 기준 상위 강의 */
-export async function listPopularLectures(limit: number): Promise<LectureWithRelations[]> {
+/** 강의 목록 화면(과목 찾기)에 쓰는 판매 중 강의 전체 */
+export async function listCatalogLectures(): Promise<LectureWithRelations[]> {
   "use cache";
   cacheLife("hours");
   cacheTag("catalog");
-  return (await listOnSaleLectures()).slice(0, limit);
+  return listOnSaleLectures();
 }
 
 export async function listLecturesByCourse(courseId: string): Promise<LectureWithRelations[]> {

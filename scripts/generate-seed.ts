@@ -26,11 +26,11 @@ const out: string[] = [
 ];
 
 out.push(
-  "insert into public.courses (id, kind, code, name, professor, semester, group_name, department, students, exam_date, exam_label) values",
+  "insert into public.courses (id, kind, code, name, professor, semester, track, group_name, department, students, exam_date, exam_label) values",
   courses
     .map((c) =>
       row([
-        q(c.id), q(c.kind), q(c.code), q(c.name), q(c.professor), q(c.semester),
+        q(c.id), q(c.kind), q(c.code), q(c.name), q(c.professor), q(c.semester), q(c.track),
         q(c.group), q(c.department), q(c.students), q(c.examDate), q(c.examLabel),
       ]),
     )

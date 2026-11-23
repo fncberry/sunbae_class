@@ -3,16 +3,24 @@
 
 begin;
 
-insert into public.courses (id, kind, code, name, professor, semester, group_name, department, students, exam_date, exam_label) values
-  ('cose213', 'major', 'COSE213', '자료구조', '박지훈', '2026-2학기', '정보대학', '컴퓨터학과', 182, '2026-12-16', '기말고사'),
-  ('cose214', 'major', 'COSE214', '알고리즘', '남궁현', '2026-2학기', '정보대학', '컴퓨터학과', 134, '2026-12-17', '기말고사'),
-  ('math141', 'major', 'MATH141', '미적분학Ⅰ', '최은영', '2026-2학기', '이과대학', '수학과', 240, '2026-12-14', '기말고사'),
-  ('phys151', 'major', 'PHYS151', '일반물리학Ⅰ', '한상우', '2026-2학기', '이과대학', '물리학과', 205, '2026-12-15', '기말고사'),
-  ('econ101', 'major', 'ECON101', '경제원론', '윤서진', '2026-2학기', '정경대학', '경제학과', 310, '2026-12-18', '기말고사'),
-  ('stat201', 'major', 'STAT201', '통계학입문', '임재원', '2026-2학기', '정경대학', '통계학과', 156, '2026-12-12', '기말고사'),
-  ('toeic', 'cert', null, '토익', null, null, '어학', null, null, '2026-12-13', '시험'),
-  ('jeongcheo', 'cert', null, '정보처리기사 실기', null, null, 'IT 자격증', null, null, '2027-04-18', '시험'),
-  ('sqld', 'cert', null, 'SQLD', null, null, 'IT 자격증', null, null, '2027-03-07', '시험');
+insert into public.courses (id, kind, code, name, professor, semester, track, group_name, department, students, exam_date, exam_label) values
+  ('cose213', 'major', 'COSE213', '자료구조', '박지훈', '2026-2학기', 'major', '정보대학', '컴퓨터학과', 182, '2026-12-16', '기말고사'),
+  ('cose214', 'major', 'COSE214', '알고리즘', '남궁현', '2026-2학기', 'major', '정보대학', '컴퓨터학과', 134, '2026-12-17', '기말고사'),
+  ('math141', 'major', 'MATH141', '미적분학Ⅰ', '최은영', '2026-2학기', 'major', '이과대학', '수학과', 240, '2026-12-14', '기말고사'),
+  ('phys151', 'major', 'PHYS151', '일반물리학Ⅰ', '한상우', '2026-2학기', 'major', '이과대학', '물리학과', 205, '2026-12-15', '기말고사'),
+  ('econ101', 'major', 'ECON101', '경제원론', '윤서진', '2026-2학기', 'major', '정경대학', '경제학과', 310, '2026-12-18', '기말고사'),
+  ('stat201', 'major', 'STAT201', '통계학입문', '임재원', '2026-2학기', 'major', '정경대학', '통계학과', 156, '2026-12-12', '기말고사'),
+  ('eece201', 'major', 'EECE201', '회로이론', '오세진', '2026-2학기', 'major', '공과대학', '전기전자공학부', 168, '2026-12-15', '기말고사'),
+  ('mech211', 'major', 'MECH211', '열역학', '장윤호', '2026-2학기', 'major', '공과대학', '기계공학부', 142, '2026-12-17', '기말고사'),
+  ('buss221', 'major', 'BUSS221', '회계원리', '서민경', '2026-2학기', 'major', '경영대학', '경영학과', 260, '2026-12-16', '기말고사'),
+  ('buss231', 'major', 'BUSS231', '마케팅원론', '이도현', '2026-2학기', 'major', '경영대학', '경영학과', 198, '2026-12-18', '기말고사'),
+  ('gewr101', 'major', 'GEWR101', '글쓰기', '한지수', '2026-2학기', 'liberal', '교양', '기초교양', 120, '2026-12-14', '기말고사'),
+  ('geae101', 'major', 'GEAE101', 'Academic English', 'Emily Carter', '2026-2학기', 'liberal', '교양', '기초교양', 90, '2026-12-11', '기말고사'),
+  ('geps101', 'major', 'GEPS101', '심리학의 이해', '문가영', '2026-2학기', 'liberal', '교양', '핵심교양', 280, '2026-12-17', '기말고사'),
+  ('geph101', 'major', 'GEPH101', '논리와 비판적 사고', '권태훈', '2026-2학기', 'liberal', '교양', '핵심교양', 150, '2026-12-15', '기말고사'),
+  ('toeic', 'cert', null, '토익', null, null, null, '어학', null, null, '2026-12-13', '시험'),
+  ('jeongcheo', 'cert', null, '정보처리기사 실기', null, null, null, 'IT 자격증', null, null, '2027-04-18', '시험'),
+  ('sqld', 'cert', null, 'SQLD', null, null, null, 'IT 자격증', null, null, '2027-03-07', '시험');
 
 insert into public.instructors (id, name, major, admission_year, bio) values
   ('jung', '정하윤', '컴퓨터학과', 24, '박지훈 교수님 자료구조 A+. 시험에서 자주 나오는 트리 회전·그래프 추적 문제를 손으로 그려가며 설명해요.'),
@@ -21,6 +29,12 @@ insert into public.instructors (id, name, major, admission_year, bio) values
   ('seo', '서준혁', '물리학과', 23, '한상우 교수님 시험은 문제 길이가 길어요. 상황을 식으로 옮기는 연습에 집중합니다.'),
   ('yoon', '윤지아', '영어교육과', 23, '파트7에서 시간이 모자라던 걸 해결하고 965점을 받았어요. 문제 유형별로 어디부터 읽을지 정해서 풀어요.'),
   ('baek', '백승호', '컴퓨터학과', 22, '실기에서 점수 차이가 나는 코드 해석 문제만 따로 모아서 정리했어요.'),
+  ('lim', '임서준', '전기전자공학부', 24, '오세진 교수님 시험은 과도응답 문제가 배점이 커요. 라플라스 변환 하나로 푸는 순서를 정리했어요.'),
+  ('hwang', '황지후', '기계공학부', 23, '사이클 문제를 상태표 하나로 정리하는 방법을 알려드려요. 계산 실수 줄이는 데 집중했어요.'),
+  ('nam', '남윤아', '경영학과', 24, '분개가 헷갈리던 사람 기준으로 설명해요. 시험에 나오는 재무제표 작성 문제를 끝까지 같이 풀어요.'),
+  ('cho', '조은별', '국어국문학과', 25, '기말 과제는 주장보다 근거 배치에서 점수가 갈려요. 제가 A+ 받은 에세이 구조를 그대로 보여드려요.'),
+  ('lee', '이준서', '영어영문학과', 24, '발표 평가 기준표를 항목별로 뜯어서, 문장 템플릿으로 바로 쓸 수 있게 만들었어요.'),
+  ('baek-h', '백하은', '심리학부', 24, '이론 이름만 외우면 서술형에서 막혀요. 실험 하나에 이론 하나씩 묶어서 기억하게 정리했어요.'),
   ('applicant-v1', '이서연', '경제학과', null, ''),
   ('applicant-v2', '김도윤', '컴퓨터학과', null, ''),
   ('applicant-v3', '박채원', '물리학과', null, ''),
@@ -34,6 +48,12 @@ insert into public.grade_verifications (instructor_id, course_id, grade, semeste
   ('seo', 'phys151', 'A+', '2025-2학기', '2025년 2학기 일반물리학Ⅰ 성적을 확인했어요', 'approved', now(), now()),
   ('yoon', 'toeic', '965', '2026-09', '2026년 9월 토익 성적표를 확인했어요', 'approved', now(), now()),
   ('baek', 'jeongcheo', '합격', '2026-2회', '2026년 2회 정보처리기사 실기 합격을 확인했어요', 'approved', now(), now()),
+  ('lim', 'eece201', 'A+', '2025-2학기', '2025년 2학기 회로이론 성적을 확인했어요', 'approved', now(), now()),
+  ('hwang', 'mech211', 'A+', '2025-2학기', '2025년 2학기 열역학 성적을 확인했어요', 'approved', now(), now()),
+  ('nam', 'buss221', 'A+', '2025-2학기', '2025년 2학기 회계원리 성적을 확인했어요', 'approved', now(), now()),
+  ('cho', 'gewr101', 'A+', '2025-2학기', '2025년 2학기 글쓰기 성적을 확인했어요', 'approved', now(), now()),
+  ('lee', 'geae101', 'A+', '2025-2학기', '2025년 2학기 Academic English 성적을 확인했어요', 'approved', now(), now()),
+  ('baek-h', 'geps101', 'A+', '2025-2학기', '2025년 2학기 심리학의 이해 성적을 확인했어요', 'approved', now(), now()),
   ('applicant-v1', 'econ101', 'A+', '2025년 2학기', null, 'pending', '2026-11-18T09:00:00+09:00', null),
   ('applicant-v2', 'cose213', 'A+', '2025년 2학기', null, 'pending', '2026-11-18T09:00:00+09:00', null),
   ('applicant-v3', 'phys151', 'A', '2025년 2학기', null, 'pending', '2026-11-17T09:00:00+09:00', null),
@@ -46,7 +66,13 @@ insert into public.lectures (id, course_id, instructor_id, title, summary, price
   ('calc-integration', 'math141', 'kang', '미적분학Ⅰ 기말: 적분 테크닉 유형별 정리', '치환·부분적분·부분분수까지, 기말에 나오는 적분 유형을 한 번에 정리해요.', 5900, 13900, 15, array['어떤 적분법을 쓸지 3초 안에 고르는 기준', '부분적분 표 그리기로 계산 실수 줄이기', '작년 시험 스타일로 직접 만든 연습 문제']::text[], 'on_sale', 87, 29, 139, 6),
   ('phys-rotation', 'phys151', 'seo', '일반물리Ⅰ 기말: 회전운동·각운동량 문제풀이', '긴 서술형 문제를 식으로 옮기는 연습에 집중한 문제풀이 강의.', 6900, null, null, array['자유물체도에서 토크 방향 헷갈리지 않는 법', '굴림 운동에서 에너지 보존 vs 회전 방정식 선택', '서술형 부분점수 받는 풀이 쓰는 법']::text[], 'on_sale', 41, 14, 64, 0),
   ('toeic-part7', 'toeic', 'yoon', '토익 RC 파트7: 시간 안에 다 푸는 순서', '지문 유형별로 어디부터 읽을지 정해 두고 푸는 방법. 파트7에서 시간이 모자란 사람을 위한 강의예요.', 9900, null, null, array['지문 유형별로 읽는 순서 정하기', '삼중 지문에서 시간 아끼는 문제 고르는 법', '실전 1세트를 시간 재고 같이 풀기']::text[], 'on_sale', 58, 17, 82, 0),
-  ('jeongcheo-code', 'jeongcheo', 'baek', '정보처리기사 실기: 코드 해석 문제만 모아서', 'C, 자바, 파이썬 코드 결과 맞히기 문제를 언어별로 정리했어요.', 7900, null, null, array['언어별로 자주 나오는 함정 정리', '출력 결과를 손으로 추적하는 순서', '직접 만든 연습 문제 20개와 해설']::text[], 'on_sale', 33, 9, 42, 0);
+  ('jeongcheo-code', 'jeongcheo', 'baek', '정보처리기사 실기: 코드 해석 문제만 모아서', 'C, 자바, 파이썬 코드 결과 맞히기 문제를 언어별로 정리했어요.', 7900, null, null, array['언어별로 자주 나오는 함정 정리', '출력 결과를 손으로 추적하는 순서', '직접 만든 연습 문제 20개와 해설']::text[], 'on_sale', 33, 9, 42, 0),
+  ('circuit-laplace', 'eece201', 'lim', '회로이론 기말: 라플라스 변환으로 과도응답 끝내기', '오세진 교수님 분반 기말에서 배점이 큰 과도응답 문제를 라플라스 변환 한 가지 방법으로 푸는 강의예요.', 6900, null, null, array['과도응답 문제를 라플라스 변환 한 가지로 푸는 순서', 'RLC 감쇠 판별을 표 하나로 정리', '직접 만든 시험 스타일 문제 10개']::text[], 'on_sale', 46, 12, 56, 0),
+  ('thermo-cycle', 'mech211', 'hwang', '열역학 기말: 사이클 문제를 상태표 하나로', '랭킨·브레이턴 사이클 문제를 상태표를 채우는 순서대로 풀어요. 계산 실수를 줄이는 데 집중한 강의예요.', 6900, null, null, array['상태표를 채우는 고정된 순서', '증기표에서 보간할 때 자주 틀리는 지점', '사이클 효율 문제 풀이 루틴']::text[], 'on_sale', 29, 8, 37, 0),
+  ('acct-statement', 'buss221', 'nam', '회계원리 기말: 분개부터 재무제표까지 한 번에', '거래 하나를 분개하고 시산표, 재무제표까지 이어지는 흐름을 시험 문제 순서대로 정리했어요.', 5900, 12900, 15, array['차변·대변을 헷갈리지 않는 분개 규칙', '수정분개에서 자주 빠뜨리는 항목', '재무제표 작성 문제를 끝까지 풀어보기']::text[], 'on_sale', 74, 21, 101, 9),
+  ('writing-argument', 'gewr101', 'cho', '글쓰기 기말 과제: 논증 에세이 뼈대 잡기', '기말 에세이에서 점수가 갈리는 근거 배치와 반론 처리 방법을 실제 A+ 에세이 구조로 보여드려요.', 4900, null, null, array['채점 기준표에서 점수가 갈리는 항목', '근거를 배치하는 순서', '반론을 넣어 설득력을 높이는 방법']::text[], 'on_sale', 88, 26, 127, 0),
+  ('aceng-presentation', 'geae101', 'lee', 'Academic English 발표 평가: 구조와 표현 템플릿', '발표 평가 기준을 항목별로 나누고, 도입·전환·마무리에 바로 쓸 수 있는 문장 템플릿을 정리했어요.', 5900, null, null, array['평가 기준표 항목별로 점수 받는 법', '도입·전환·마무리 문장 템플릿', '질의응답에서 시간 버는 표현']::text[], 'on_sale', 52, 15, 71, 0),
+  ('psych-final', 'geps101', 'baek-h', '심리학의 이해 기말: 이론별 핵심 실험 정리', '이론 하나에 대표 실험 하나를 묶어서, 서술형 문제에서 바로 꺼내 쓸 수 있게 정리했어요.', 4900, null, null, array['이론과 대표 실험을 짝지어 외우는 표', '서술형에서 부분점수 받는 답안 구조', '직접 만든 예상 문제와 모범 답안']::text[], 'on_sale', 95, 19, 91, 0);
 
 insert into public.chapters (lecture_id, position, title, minutes, is_preview) values
   ('ds-final-tree-graph', 0, '0강. 오리엔테이션: 이 교수님 시험은 이렇게 나와요', 8, true),
@@ -81,7 +107,36 @@ insert into public.chapters (lecture_id, position, title, minutes, is_preview) v
   ('jeongcheo-code', 1, '1강. C 포인터와 배열', 46, false),
   ('jeongcheo-code', 2, '2강. 자바 상속과 오버라이딩', 44, false),
   ('jeongcheo-code', 3, '3강. 파이썬 리스트와 슬라이싱', 31, false),
-  ('jeongcheo-code', 4, '4강. 직접 만든 연습 문제 20개', 63, false);
+  ('jeongcheo-code', 4, '4강. 직접 만든 연습 문제 20개', 63, false),
+  ('circuit-laplace', 0, '0강. 이 교수님 시험의 과도응답 문제', 8, true),
+  ('circuit-laplace', 1, '1강. 라플라스 변환 표 외우는 순서', 41, false),
+  ('circuit-laplace', 2, '2강. RC·RL 회로 과도응답', 48, false),
+  ('circuit-laplace', 3, '3강. RLC 회로와 감쇠 판별', 55, false),
+  ('circuit-laplace', 4, '4강. 시험 스타일 문제 10선', 70, false),
+  ('thermo-cycle', 0, '0강. 상태표 채우는 순서', 9, true),
+  ('thermo-cycle', 1, '1강. 증기표 읽기', 38, false),
+  ('thermo-cycle', 2, '2강. 랭킨 사이클', 52, false),
+  ('thermo-cycle', 3, '3강. 브레이턴 사이클', 47, false),
+  ('thermo-cycle', 4, '4강. 기출 스타일 종합 문제', 66, false),
+  ('acct-statement', 0, '0강. 서민경 교수님 시험 구성', 7, true),
+  ('acct-statement', 1, '1강. 분개 규칙 한 장 정리', 44, false),
+  ('acct-statement', 2, '2강. 수정분개와 결산', 50, false),
+  ('acct-statement', 3, '3강. 재무제표 작성', 46, false),
+  ('acct-statement', 4, '4강. 종합 문제 같이 풀기', 72, false),
+  ('writing-argument', 0, '0강. 채점 기준표 읽는 법', 8, true),
+  ('writing-argument', 1, '1강. 주장 한 문장 만들기', 32, false),
+  ('writing-argument', 2, '2강. 근거 배치와 단락 구성', 41, false),
+  ('writing-argument', 3, '3강. 반론 처리하기', 36, false),
+  ('aceng-presentation', 0, '0강. 발표 평가 기준 뜯어보기', 9, true),
+  ('aceng-presentation', 1, '1강. 도입과 주제 제시', 34, false),
+  ('aceng-presentation', 2, '2강. 전환 표현과 근거 제시', 39, false),
+  ('aceng-presentation', 3, '3강. 질의응답 대비', 31, false),
+  ('aceng-presentation', 4, '4강. 실제 발표 피드백 사례', 45, false),
+  ('psych-final', 0, '0강. 서술형 채점 포인트', 7, true),
+  ('psych-final', 1, '1강. 학습과 조건형성', 36, false),
+  ('psych-final', 2, '2강. 기억과 망각', 40, false),
+  ('psych-final', 3, '3강. 사회심리 실험', 43, false),
+  ('psych-final', 4, '4강. 서술형 답안 써보기', 38, false);
 
 alter table public.reviews disable trigger reviews_sync_counters;
 insert into public.reviews (lecture_id, author_label, rating, body, created_at) values

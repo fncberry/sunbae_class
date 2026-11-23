@@ -137,6 +137,7 @@ export type Database = {
           professor: string | null
           semester: string | null
           students: number | null
+          track: Database["public"]["Enums"]["course_track"] | null
         }
         Insert: {
           code?: string | null
@@ -151,6 +152,7 @@ export type Database = {
           professor?: string | null
           semester?: string | null
           students?: number | null
+          track?: Database["public"]["Enums"]["course_track"] | null
         }
         Update: {
           code?: string | null
@@ -165,6 +167,7 @@ export type Database = {
           professor?: string | null
           semester?: string | null
           students?: number | null
+          track?: Database["public"]["Enums"]["course_track"] | null
         }
         Relationships: []
       }
@@ -526,6 +529,7 @@ export type Database = {
     }
     Enums: {
       course_kind: "major" | "cert"
+      course_track: "major" | "liberal"
       lecture_status: "draft" | "reviewing" | "on_sale" | "hidden" | "rejected"
       order_status: "pending" | "paid" | "refunded" | "cancelled"
       purchase_option: "video" | "study"

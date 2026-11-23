@@ -1,18 +1,15 @@
+import type { Metadata } from "next";
 import { CourseCatalog } from "@/components/CourseCatalog";
-import { listCatalogCourses } from "@/lib/data";
+import { listCatalogLectures, listCourses } from "@/lib/data";
+
+export const metadata: Metadata = { title: "과목 찾기 | 선배클래스" };
 
 export default async function CoursesPage() {
-  const catalog = await listCatalogCourses();
+  const [courses, lectures] = await Promise.all([listCourses(), listCatalogLectures()]);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 pt-14">
-      <h1 className="font-serif text-[40px] font-bold">과목 찾기</h1>
-      <p className="mt-2 max-w-[56ch] text-lg text-ink-soft">
-        듣고 있는 수업이나 준비 중인 시험을 찾아보세요.
-      </p>
-      <div className="mt-10">
-        <CourseCatalog courses={catalog} />
-      </div>
+    <div className="mx-auto max-w-6xl px-6 pt-10">
+      <CourseCatalog courses={courses} lectures={lectures} />
     </div>
   );
 }
