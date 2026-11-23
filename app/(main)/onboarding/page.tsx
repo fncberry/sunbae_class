@@ -17,7 +17,7 @@ export default function OnboardingPage(props: PageProps<"/onboarding">) {
       <div className="lg:col-span-6">
         <h1 className="font-serif text-[34px] font-bold leading-[1.3]">가입 마무리</h1>
         <p className="mt-5 max-w-[40ch] text-lg leading-relaxed text-ink-soft">
-          학번과 학과만 적으면 끝나요. 한 번만 하면 돼요.
+          이름, 닉네임, 학번, 학과만 적으면 끝나요. 한 번만 하면 돼요.
         </p>
         <ul className="mt-8 max-w-[44ch] space-y-2.5 text-sm leading-relaxed text-ink-soft">
           <li>학번은 영상 워터마크에 들어가서, 한 학번은 한 계정에만 쓸 수 있어요.</li>
@@ -25,7 +25,7 @@ export default function OnboardingPage(props: PageProps<"/onboarding">) {
         </ul>
       </div>
       <div className="lg:col-span-5 lg:col-start-8 lg:pt-2">
-        <Suspense fallback={<div className="h-[520px]" aria-hidden />}>
+        <Suspense fallback={<div className="h-[680px]" aria-hidden />}>
           <OnboardingContent searchParams={props.searchParams} />
         </Suspense>
       </div>
@@ -39,11 +39,22 @@ async function OnboardingContent({ searchParams }: { searchParams: PageProps<"/o
   const user = await requireSignedIn(`/onboarding?next=${encodeURIComponent(next)}`);
   if (user.onboarded) redirect(next);
 
-  // 고려대 구글 계정 이름(예: "홍길동[ 학부재학 / 컴퓨터학과 ]")에서 학과를 읽어 미리 채운다
+  // 고려대 구글 계정 이름(예: "홍길동[ 학부재학 / 컴퓨터학과 ]")에서 이름·학과를 읽어 미리 채운다
   const supabase = await createServerSupabase();
   const { data } = await supabase.auth.getClaims();
   const meta = (data?.claims.user_metadata ?? {}) as Record<string, unknown>;
   const school = parseSchoolAccountName(meta.full_name ?? meta.name);
 
-  return <OnboardingForm next={next} email={user.email} majorHint={user.major ?? school?.major ?? null} />;
+  return (
+    <OnboardingForm
+      next={next}
+      email={user.email}
+      defaults={{
+        name: user.name ?? school?.name ?? "",
+        nickname: user.nickname ?? "",
+        major: user.major ?? school?.major ?? "",
+      }}
+      fromSchoolAccount={!!(school?.name || school?.major)}
+    />
+  );
 }

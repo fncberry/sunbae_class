@@ -457,6 +457,8 @@ export type Database = {
           email: string
           id: string
           major: string | null
+          name: string | null
+          nickname: string | null
           onboarded_at: string | null
           role: Database["public"]["Enums"]["user_role"]
           student_id: string | null
@@ -467,6 +469,8 @@ export type Database = {
           email: string
           id: string
           major?: string | null
+          name?: string | null
+          nickname?: string | null
           onboarded_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           student_id?: string | null
@@ -477,6 +481,8 @@ export type Database = {
           email?: string
           id?: string
           major?: string | null
+          name?: string | null
+          nickname?: string | null
           onboarded_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           student_id?: string | null

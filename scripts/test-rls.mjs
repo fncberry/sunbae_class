@@ -164,18 +164,27 @@ check("남의 진도 안 보임", (await one("authenticated", S2, "select count(
 
 console.log("\n[온보딩]");
 {
-  const prof = (uid) => one("postgres", null, "select student_id, major, terms_agreed_at, onboarded_at from profiles where id=$1", [uid]);
+  const prof = (uid) => one("postgres", null, "select student_id, major, name, nickname, terms_agreed_at, onboarded_at from profiles where id=$1", [uid]);
   check("처음엔 온보딩 전", (await prof(S2)).onboarded_at === null);
   check("학번 형식 아니면 거부", !!(await rejects("authenticated", S2, "update profiles set student_id='12345' where id=$1", [S2])));
   check("학과가 너무 짧으면 거부", !!(await rejects("authenticated", S2, "update profiles set major=' ' || 'a' where id=$1", [S2])));
   check("다른 사람 학번은 못 씀", !!(await rejects("authenticated", S2, "update profiles set student_id='2026123412' where id=$1", [S2])));
   check("onboarded_at 직접 쓰기 불가", !!(await rejects("authenticated", S2, "update profiles set onboarded_at=now() where id=$1", [S2])));
-  await as("authenticated", S2, "update profiles set student_id='2025320001', major='  경영학과 ' where id=$1", [S2]);
-  check("약관 동의 전에는 온보딩 미완료", (await prof(S2)).onboarded_at === null);
-  await as("authenticated", S2, "update profiles set terms_agreed_at='2000-01-01' where id=$1", [S2]);
+  check("닉네임 형식(공백·특수문자) 거부", !!(await rejects("authenticated", S2, "update profiles set nickname='선배 클래스!' where id=$1", [S2])));
+  check("운영진 사칭 닉네임 거부", !!(await rejects("authenticated", S2, "update profiles set nickname='운영자1' where id=$1", [S2])));
+  check("서비스 이름 닉네임 거부 (대소문자 무시)", !!(await rejects("authenticated", S2, "update profiles set nickname='Sunbae_kr' where id=$1", [S2])));
+  check("이름 한 글자 거부", !!(await rejects("authenticated", S2, "update profiles set name='김' where id=$1", [S2])));
+  await as("authenticated", S1, "update profiles set nickname='Tiger' where id=$1", [S1]);
+  check("다른 사람 닉네임은 못 씀 (대소문자 무시)", !!(await rejects("authenticated", S2, "update profiles set nickname='tiger' where id=$1", [S2])));
+  await as("authenticated", S2, "update profiles set student_id='2025320001', major='  경영학과 ', terms_agreed_at='2000-01-01' where id=$1", [S2]);
+  check("이름·닉네임 없으면 온보딩 미완료", (await prof(S2)).onboarded_at === null);
+  await as("authenticated", S2, "update profiles set name=' 홍길동 ', nickname='길동이' where id=$1", [S2]);
   const done = await prof(S2);
   check("동의하면 온보딩 완료", done.onboarded_at !== null);
   check("동의 시각은 서버 시각 (보낸 값 무시)", new Date(done.terms_agreed_at).getFullYear() > 2000, String(done.terms_agreed_at));
+  check("이름 앞뒤 공백 정리", done.name === "홍길동", done.name);
+  check("온보딩 후 닉네임 변경 가능", (await as("authenticated", S2, "update profiles set nickname='길동2' where id=$1 returning id", [S2])).rows.length === 1);
+  check("온보딩 후 이름 비우기 불가", !!(await rejects("authenticated", S2, "update profiles set name=null where id=$1", [S2])));
   check("학과 앞뒤 공백 정리", done.major === "경영학과", done.major);
   check("온보딩 후 학번 변경 불가", !!(await rejects("authenticated", S2, "update profiles set student_id='2025320002' where id=$1", [S2])));
   check("온보딩 후 학과 변경은 가능", (await as("authenticated", S2, "update profiles set major='경제학과' where id=$1 returning id", [S2])).rows.length === 1);

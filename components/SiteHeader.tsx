@@ -33,7 +33,7 @@ async function UserMenu() {
   return (
     <div className="flex items-center gap-4 text-sm">
       <span className="hidden text-ink-soft sm:inline" title={user.email}>
-        {user.email.split("@")[0]}
+        {user.nickname ?? user.email.split("@")[0]}
         {user.role === "admin" && (
           <Link href="/admin" className="ml-3 underline underline-offset-4 hover:text-ink">
             운영

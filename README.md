@@ -7,7 +7,7 @@
 - 공개 화면(홈, 과목 찾기, 과목, 강의 상세)은 **Supabase DB**에서 읽습니다. 데이터는 예시 시드입니다.
 - 과목 찾기(`/courses`)는 왼쪽 카테고리(전공 → 단과대학, 교양, 자격증·어학)와 강의 카드 목록입니다. 카테고리·정렬·보기 방식은 URL(`?c=&d=&sort=&view=`)에 남습니다.
 - **고려대 구글 계정(@korea.ac.kr) 로그인**이 됩니다. 고려대 메일은 Google Workspace라 학교 메일 계정으로 구글 로그인을 합니다.
-- 처음 로그인하면 **온보딩**(학번·학과·개인정보 동의)을 거칩니다. 온보딩 전에는 `/instructor`·`/watch`·`/admin`이 열리지 않습니다.
+- 처음 로그인하면 **온보딩**(이름·닉네임·학번·학과·개인정보 동의)을 거칩니다. 온보딩 전에는 `/instructor`·`/watch`·`/admin`이 열리지 않습니다.
 - `/instructor`·`/watch`는 로그인, `/admin`은 운영자만 열립니다. 다만 강사 센터·운영자 화면의 내용은 아직 예시 데이터입니다.
 - 결제(그로블), 영상 스트리밍은 아직 연결하지 않았습니다.
 
@@ -31,19 +31,20 @@ http://localhost:3000 에서 확인합니다.
 | `app/auth/callback/route.ts` | 구글 로그인 뒤 돌아오는 곳. 세션 쿠키를 만들고 원래 화면으로 이동, 실패하면 이유별 안내 |
 | `proxy.ts` | 모든 요청에서 세션 갱신 + 로그인 필요 경로는 `/login?next=`로 1차 리다이렉트 |
 | `lib/auth.ts` | `getCurrentUser`·`requireSignedIn`(로그인만)·`requireUser`(로그인+온보딩)·`requireAdmin`. 실제 권한 검사는 여기서 |
-| `app/(main)/onboarding/` | 첫 로그인 후 학번·학과·동의 입력 (서버 액션 `completeOnboarding`) |
-| `lib/onboarding.ts` | 학번·학과 입력 규칙, 고려대 구글 계정 이름(`홍길동[ 학부재학 / 컴퓨터학과 ]`)에서 학과 읽기 |
+| `app/(main)/onboarding/` | 첫 로그인 후 이름·닉네임·학번·학과·동의 입력 (서버 액션 `completeOnboarding`) |
+| `lib/onboarding.ts` | 이름·닉네임·학번·학과 입력 규칙, 고려대 구글 계정 이름(`홍길동[ 학부재학 / 컴퓨터학과 ]`)에서 이름·학과 읽기 |
 
 - 학교 메일 제한은 DB 트리거(`auth.users`)가 합니다. `hd`는 구글 계정 선택 화면의 힌트일 뿐이라, 개인 Gmail을 골라도 트리거가 가입을 막고 로그인 화면에 안내가 나옵니다. 공개 키로 Auth API를 직접 불러도 다른 도메인은 가입할 수 없습니다.
 - 메일 발송(SMTP)은 쓰지 않습니다.
 
-### 온보딩 (`20261123102103_onboarding`)
+### 온보딩 (`20261123102103_onboarding`, `20261123103621_profile_names`)
 
 - 로그인 콜백에서 `profiles.onboarded_at`이 비어 있으면 `/onboarding?next=`로 보냅니다.
-- `profiles`에 `major`, `terms_agreed_at`, `onboarded_at`이 있습니다. 본인은 `student_id`·`major`·`terms_agreed_at`만 쓸 수 있습니다.
-- 트리거 `private.guard_profile_update`가 동의 시각과 완료 시각을 서버 시각으로 정합니다(클라이언트 값 무시). 세 값이 다 차면 `onboarded_at`이 찍힙니다.
+- `profiles`에 `name`(실명, 비공개), `nickname`(서비스 안에서 보이는 이름), `major`, `terms_agreed_at`, `onboarded_at`이 있습니다. 본인은 `name`·`nickname`·`student_id`·`major`·`terms_agreed_at`만 쓸 수 있습니다.
+- 트리거 `private.guard_profile_update`가 동의 시각과 완료 시각을 서버 시각으로 정합니다(클라이언트 값 무시). 다섯 값이 다 차면 `onboarded_at`이 찍히고, 그 뒤에는 이름·닉네임·학과를 비울 수 없습니다.
+- 닉네임: 한글·영문·숫자·`_`·`.` 2~12자, 대소문자 무시하고 겹칠 수 없음, `운영`·`관리자`·`admin`·`선배클래스`·`sunbae`가 들어가면 거부. 헤더에는 닉네임이 보입니다.
 - 학번은 `(19|20)` + 8자리, 한 학번은 한 계정만(워터마크를 남에게 돌리지 못하게). 온보딩 후에는 본인이 바꿀 수 없고, 정정은 SQL Editor에서 운영자가 합니다.
-- 학과는 언제든 바꿀 수 있습니다. 구글 계정 이름은 학과를 미리 채우는 데만 쓰고 저장하지 않습니다.
+- 이름·닉네임·학과는 바꿀 수 있습니다. 구글 계정 이름은 이름·학과를 미리 채우는 데만 쓰고, 사용자가 확인해 제출한 값만 저장합니다.
 - 운영자가 아니면 `/admin`은 404로 보입니다.
 - 운영자 지정은 SQL로만 합니다 (앱에서 자기 역할을 바꿀 수 없음):
   `update public.profiles set role = 'admin' where email = '아이디@korea.ac.kr';`
@@ -64,7 +65,7 @@ Supabase 대시보드에서 해야 하는 설정:
 | `/courses/[courseId]` | 과목(분반) 페이지: 강의 목록, 강사가 없을 때 빈 화면 |
 | `/lectures/[lectureId]` | 강의 상세: 맛보기, 성적 인증 배지, 커리큘럼, 후기, 결제 옵션(영상/스터디반) |
 | `/login` | 고려대 구글 계정으로 로그인 |
-| `/onboarding` | 가입 마무리 (로그인 필요): 학번, 학과(학교 계정에서 미리 채움), 개인정보 수집·이용 동의 |
+| `/onboarding` | 가입 마무리 (로그인 필요): 이름·학과(학교 계정에서 미리 채움), 닉네임, 학번, 개인정보 수집·이용 동의 |
 | `/watch/[lectureId]` | 시청 (로그인 필요): 내 학번 워터마크, 챕터 목록, 진도율(예시) |
 | `/instructor` | 강사 센터 (로그인 필요, 내용은 예시): 인증 상태, 판매·정산, 강의 업로드 폼 |
 | `/admin` | 운영자 (운영자만, 내용은 예시): 성적 인증 승인/반려 대기열 |
