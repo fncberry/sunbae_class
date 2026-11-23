@@ -5,7 +5,7 @@ import { PurchaseBox } from "@/components/PurchaseBox";
 import { SyllabusRow } from "@/components/SyllabusRow";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { getLecture, listLectureIds, listReviews } from "@/lib/data";
-import { courseLabel, koDate, minutesLabel, totalMinutes, won } from "@/lib/format";
+import { courseLabel, instructorMeta, koDate, minutesLabel, totalMinutes, won } from "@/lib/format";
 
 export async function generateStaticParams() {
   const ids = await listLectureIds();
@@ -59,7 +59,7 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
             <SyllabusRow label="강사">
               <p className="font-serif text-xl font-bold">{instructor.name}</p>
               <p className="mt-0.5 text-sm text-ink-soft">
-                {instructor.major} {instructor.admissionYear}학번
+                {instructorMeta(instructor)}
               </p>
               <div className="mt-4">
                 <VerifiedBadge

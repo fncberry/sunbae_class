@@ -15,7 +15,7 @@ const q = (v: string | number | boolean | null | undefined): string => {
 const arr = (vs: string[]) => `array[${vs.map(q).join(", ")}]::text[]`;
 const row = (vs: string[]) => `  (${vs.join(", ")})`;
 
-const statusMap = { "판매 중": "on_sale", "검수 중": "reviewing" } as const;
+const statusMap = { "초안": "draft", "검수 중": "reviewing", "판매 중": "on_sale", "숨김": "hidden", "반려": "rejected" } as const;
 
 const out: string[] = [
   "-- ⚠️ scripts/generate-seed.ts가 만든 파일입니다. 직접 고치지 말고 lib/mock-data.ts를 고친 뒤 다시 생성하세요.",

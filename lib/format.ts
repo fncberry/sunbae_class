@@ -1,4 +1,11 @@
-import type { Course, Lecture } from "./types";
+import type { Course, Instructor, Lecture } from "./types";
+
+/** "컴퓨터학과 24학번". 학번이 없으면 학과만. */
+export function instructorMeta(instructor: Pick<Instructor, "major" | "admissionYear">) {
+  return instructor.admissionYear === null
+    ? instructor.major
+    : `${instructor.major} ${instructor.admissionYear}학번`;
+}
 
 /** 목록·이동 링크에 쓰는 과목 이름. 대학 수업은 학수번호와 교수님까지 붙인다. */
 export function courseLabel(course: Course) {

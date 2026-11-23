@@ -25,7 +25,7 @@ export type Instructor = {
   id: string;
   name: string;
   major: string;
-  admissionYear: number;
+  admissionYear: number | null; // 학번 앞 두 자리. 지원서에 없으면 null
   grade: string; // 성적(A+), 점수(965), 합격 등
   verifiedCourseId: string;
   verifiedSemester: string;
@@ -41,7 +41,7 @@ export type Chapter = {
 
 export type StudyGroup = { price: number; capacity: number; remaining: number };
 
-export type LectureStatus = "판매 중" | "검수 중";
+export type LectureStatus = "초안" | "검수 중" | "판매 중" | "숨김" | "반려";
 
 export type Lecture = {
   id: string;
