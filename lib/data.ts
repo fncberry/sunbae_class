@@ -40,6 +40,8 @@ function toCourse(row: Tables<"courses">): Course {
     name: row.name,
     professor: row.professor ?? undefined,
     semester: row.semester ?? undefined,
+    // 마이그레이션(course_track) 적용 전 DB에서도 동작하도록, 대학 수업에 값이 없으면 전공으로 본다
+    track: row.kind === "major" ? (row.track ?? "major") : undefined,
     group: row.group_name,
     department: row.department ?? undefined,
     students: row.students ?? undefined,
@@ -171,6 +173,14 @@ async function listOnSaleLectures(): Promise<LectureWithRelations[]> {
     .overrideTypes<LectureRow[], { merge: false }>();
   if (error) fail("강의 목록", error);
   return toLectures(data);
+}
+
+/** 강의 목록 화면(과목 찾기)에 쓰는 판매 중 강의 전체 */
+export async function listCatalogLectures(): Promise<LectureWithRelations[]> {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("catalog");
+  return listOnSaleLectures();
 }
 
 /** 판매 수 기준 상위 강의 */
