@@ -88,3 +88,21 @@ export type VerificationRequest = {
   semester: string; // 화면 표시용 (학기 또는 응시 시기)
   submittedAt: string;
 };
+
+/** 강사 상세 화면: 강사 + 승인된 인증 + 판매 중 강의 + 후기 + 요약 지표 */
+export type InstructorProfile = {
+  instructor: Pick<Instructor, "id" | "name" | "major" | "admissionYear" | "bio">;
+  /** 승인된 성적·점수 인증. 과목이 여러 개일 수 있다 */
+  verifications: { course: Course; grade: string; proof: string }[];
+  lectures: LectureWithRelations[];
+  /** 이 강사의 강의에 달린 후기, 최신순 */
+  reviews: (Review & { lectureTitle: string })[];
+  stats: {
+    /** 강의별 후기 수를 반영한 평균 평점. 후기가 없으면 null */
+    rating: number | null;
+    reviewCount: number;
+    students: number;
+    lectureCount: number;
+  };
+};
+

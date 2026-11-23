@@ -11,6 +11,7 @@ import type { Tables } from "./database.types";
 import type {
   Course,
   Instructor,
+  InstructorProfile,
   Lecture,
   LectureStatus,
   LectureWithRelations,
@@ -214,6 +215,95 @@ export async function listReviews(lectureId: string): Promise<Review[]> {
     text: r.body,
     date: kstDate.format(new Date(r.created_at)),
   }));
+}
+
+// ─── 강사 상세 (공개) ───────────────────────────────────────
+
+/** 판매 중 강의가 있는 강사 id (generateStaticParams용) */
+export async function listInstructorIds(): Promise<string[]> {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("catalog");
+  return [...new Set((await listOnSaleLectures()).map((l) => l.instructorId))];
+}
+
+/**
+ * 강사 공개 프로필. 승인된 인증이 하나도 없으면 null(404).
+ * 평균 평점은 강의별 반올림 값이 아니라 rating_sum / review_count 합계로 계산한다.
+ */
+export async function getInstructorProfile(id: string): Promise<InstructorProfile | null> {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("catalog");
+  const sb = publicSupabase();
+
+  const [instRes, verRes, counterRes, allLectures] = await Promise.all([
+    // user_id(로그인 계정 id)는 공개 화면에 필요 없으므로 가져오지 않는다
+    sb.from("instructors").select("id, name, major, admission_year, bio").eq("id", id).maybeSingle(),
+    sb
+      .from("grade_verifications")
+      .select("grade, proof_text, course:courses!inner(*)")
+      .eq("instructor_id", id)
+      .eq("status", "approved")
+      .overrideTypes<{ grade: string; proof_text: string | null; course: Tables<"courses"> }[], { merge: false }>(),
+    sb.from("lectures").select("rating_sum, review_count, sales_count").eq("instructor_id", id).eq("status", "on_sale"),
+    listOnSaleLectures(),
+  ]);
+  if (instRes.error) fail(`강사 ${id}`, instRes.error);
+  if (verRes.error) fail(`강사 ${id} 인증`, verRes.error);
+  if (counterRes.error) fail(`강사 ${id} 강의 지표`, counterRes.error);
+
+  const inst = instRes.data;
+  const verifications = verRes.data;
+  if (!inst || verifications.length === 0) return null;
+
+  const lectures = allLectures.filter((l) => l.instructorId === id);
+  const titles = new Map(lectures.map((l) => [l.id, l.title]));
+
+  let reviews: InstructorProfile["reviews"] = [];
+  if (lectures.length > 0) {
+    const { data, error } = await sb
+      .from("reviews")
+      .select("*")
+      .in("lecture_id", lectures.map((l) => l.id))
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) fail(`강사 ${id} 후기`, error);
+    reviews = data.map((r) => ({
+      lectureId: r.lecture_id,
+      lectureTitle: titles.get(r.lecture_id) ?? "",
+      author: r.author_label,
+      rating: r.rating,
+      text: r.body,
+      date: kstDate.format(new Date(r.created_at)),
+    }));
+  }
+
+  const ratingSum = counterRes.data.reduce((s, r) => s + r.rating_sum, 0);
+  const reviewCount = counterRes.data.reduce((s, r) => s + r.review_count, 0);
+
+  return {
+    instructor: {
+      id: inst.id,
+      name: inst.name,
+      major: inst.major,
+      admissionYear: inst.admission_year,
+      bio: inst.bio,
+    },
+    verifications: verifications.map((v) => ({
+      course: toCourse(v.course),
+      grade: v.grade,
+      proof: v.proof_text ?? "",
+    })),
+    lectures,
+    reviews,
+    stats: {
+      rating: reviewCount ? Math.round((ratingSum / reviewCount) * 10) / 10 : null,
+      reviewCount,
+      students: counterRes.data.reduce((s, r) => s + r.sales_count, 0),
+      lectureCount: lectures.length,
+    },
+  };
 }
 
 // ─── 강사 센터 (로그인한 강사 기준, 캐시하지 않음) ──────────────

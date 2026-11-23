@@ -57,7 +57,12 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
 
           <div className="mt-12">
             <SyllabusRow label="강사">
-              <p className="font-serif text-xl font-bold">{instructor.name}</p>
+              <Link
+                href={`/instructors/${instructor.id}`}
+                className="font-serif text-xl font-bold underline-offset-4 hover:underline"
+              >
+                {instructor.name}
+              </Link>
               <p className="mt-0.5 text-sm text-ink-soft">
                 {instructorMeta(instructor)}
               </p>
@@ -69,6 +74,12 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
                 />
               </div>
               <p className="mt-4 max-w-[60ch] leading-relaxed">{instructor.bio}</p>
+              <Link
+                href={`/instructors/${instructor.id}`}
+                className="mt-4 inline-block text-sm font-medium underline underline-offset-4"
+              >
+                {instructor.name} 선배의 다른 강의와 후기 보기
+              </Link>
             </SyllabusRow>
 
             <SyllabusRow label="다루는 내용">
