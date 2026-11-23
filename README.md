@@ -5,7 +5,7 @@
 현재 상태:
 
 - 공개 화면(홈, 과목 찾기, 과목, 강의 상세)은 **Supabase DB**에서 읽습니다. 데이터는 예시 시드입니다.
-- **고려대 메일(@korea.ac.kr) 로그인**이 됩니다. 비밀번호 없이 메일 링크로 로그인합니다.
+- **고려대 구글 계정(@korea.ac.kr) 로그인**이 됩니다. 고려대 메일은 Google Workspace라 학교 메일 계정으로 구글 로그인을 합니다.
 - `/instructor`·`/watch`는 로그인, `/admin`은 운영자만 열립니다. 다만 강사 센터·운영자 화면의 내용은 아직 예시 데이터입니다.
 - 결제(그로블), 영상 스트리밍은 아직 연결하지 않았습니다.
 
@@ -25,20 +25,23 @@ http://localhost:3000 에서 확인합니다.
 
 | 파일 | 역할 |
 |---|---|
-| `app/(main)/login/` | 메일 입력 → `signInWithOtp`로 로그인 링크 발송 (서버 액션) |
-| `app/auth/callback/route.ts` | 메일 링크가 돌아오는 곳. 세션 쿠키를 만들고 원래 화면으로 이동 |
+| `app/(main)/login/` | "고려대 구글 계정으로 로그인" 버튼 → `signInWithOAuth`(google, `hd=korea.ac.kr`)로 이동 (서버 액션) |
+| `app/auth/callback/route.ts` | 구글 로그인 뒤 돌아오는 곳. 세션 쿠키를 만들고 원래 화면으로 이동, 실패하면 이유별 안내 |
 | `proxy.ts` | 모든 요청에서 세션 갱신 + 로그인 필요 경로는 `/login?next=`로 1차 리다이렉트 |
 | `lib/auth.ts` | `getCurrentUser`·`requireUser`·`requireAdmin`. 실제 권한 검사는 여기서 |
 
-- 학교 메일 제한은 폼뿐 아니라 DB 트리거(`auth.users`)에서도 막습니다. 공개 키로 Auth API를 직접 불러도 다른 도메인은 가입할 수 없습니다.
+- 학교 메일 제한은 DB 트리거(`auth.users`)가 합니다. `hd`는 구글 계정 선택 화면의 힌트일 뿐이라, 개인 Gmail을 골라도 트리거가 가입을 막고 로그인 화면에 안내가 나옵니다. 공개 키로 Auth API를 직접 불러도 다른 도메인은 가입할 수 없습니다.
+- 메일 발송(SMTP)은 쓰지 않습니다.
 - 운영자가 아니면 `/admin`은 404로 보입니다.
 - 운영자 지정은 SQL로만 합니다 (앱에서 자기 역할을 바꿀 수 없음):
   `update public.profiles set role = 'admin' where email = '아이디@korea.ac.kr';`
 
 Supabase 대시보드에서 해야 하는 설정:
 
-1. Authentication → URL Configuration: Site URL과 Redirect URLs에 `http://localhost:3000/**`, 배포 주소 `/**` 추가
-2. Authentication → Emails → SMTP: 기본 메일 발송은 Supabase 조직 멤버 주소로만 가고 시간당 발송량도 적습니다. 학생들이 쓰려면 별도 SMTP(Resend 등) 연결이 필요합니다.
+1. Authentication → Sign In / Providers → Google: Google Cloud Console에서 만든 OAuth 클라이언트(웹 애플리케이션)의 Client ID·Secret.
+   Google 쪽 승인된 리디렉션 URI는 `https://<프로젝트 ref>.supabase.co/auth/v1/callback`
+2. Google Cloud Console → OAuth 동의 화면: 게시 상태가 "테스트"면 등록한 테스트 사용자만 로그인됩니다. 학생에게 열 때 "프로덕션"으로 게시 (email·profile 범위만 써서 심사 불필요)
+3. Authentication → URL Configuration: Site URL과 Redirect URLs에 `http://localhost:3000/**`, 배포 주소 `/**` 추가. 빠지면 로그인 뒤 Site URL로 튕깁니다.
 
 ## 화면
 
@@ -48,7 +51,7 @@ Supabase 대시보드에서 해야 하는 설정:
 | `/courses` | 과목 찾기: 전공·교양 / 자격증·어학 탭, 단과대학·분야 필터, 정렬 |
 | `/courses/[courseId]` | 과목(분반) 페이지: 강의 목록, 강사가 없을 때 빈 화면 |
 | `/lectures/[lectureId]` | 강의 상세: 맛보기, 성적 인증 배지, 커리큘럼, 후기, 결제 옵션(영상/스터디반) |
-| `/login` | 고려대 메일로 로그인 링크 받기 |
+| `/login` | 고려대 구글 계정으로 로그인 |
 | `/watch/[lectureId]` | 시청 (로그인 필요): 내 학번 워터마크, 챕터 목록, 진도율(예시) |
 | `/instructor` | 강사 센터 (로그인 필요, 내용은 예시): 인증 상태, 판매·정산, 강의 업로드 폼 |
 | `/admin` | 운영자 (운영자만, 내용은 예시): 성적 인증 승인/반려 대기열 |
