@@ -5,8 +5,9 @@
 현재 상태:
 
 - 공개 화면(홈, 과목 찾기, 과목, 강의 상세)은 **Supabase DB**에서 읽습니다. 데이터는 예시 시드입니다.
-- 로그인, 결제(그로블), 영상 스트리밍은 아직 연결하지 않았습니다.
-- 강사 센터(`/instructor`)·운영자(`/admin`)는 로그인이 필요해서 아직 `lib/mock-data.ts` 더미 데이터를 씁니다.
+- **고려대 메일(@korea.ac.kr) 로그인**이 됩니다. 비밀번호 없이 메일 링크로 로그인합니다.
+- `/instructor`·`/watch`는 로그인, `/admin`은 운영자만 열립니다. 다만 강사 센터·운영자 화면의 내용은 아직 예시 데이터입니다.
+- 결제(그로블), 영상 스트리밍은 아직 연결하지 않았습니다.
 
 ## 실행
 
@@ -20,6 +21,25 @@ npm run dev
 
 http://localhost:3000 에서 확인합니다.
 
+## 로그인
+
+| 파일 | 역할 |
+|---|---|
+| `app/(main)/login/` | 메일 입력 → `signInWithOtp`로 로그인 링크 발송 (서버 액션) |
+| `app/auth/callback/route.ts` | 메일 링크가 돌아오는 곳. 세션 쿠키를 만들고 원래 화면으로 이동 |
+| `proxy.ts` | 모든 요청에서 세션 갱신 + 로그인 필요 경로는 `/login?next=`로 1차 리다이렉트 |
+| `lib/auth.ts` | `getCurrentUser`·`requireUser`·`requireAdmin`. 실제 권한 검사는 여기서 |
+
+- 학교 메일 제한은 폼뿐 아니라 DB 트리거(`auth.users`)에서도 막습니다. 공개 키로 Auth API를 직접 불러도 다른 도메인은 가입할 수 없습니다.
+- 운영자가 아니면 `/admin`은 404로 보입니다.
+- 운영자 지정은 SQL로만 합니다 (앱에서 자기 역할을 바꿀 수 없음):
+  `update public.profiles set role = 'admin' where email = '아이디@korea.ac.kr';`
+
+Supabase 대시보드에서 해야 하는 설정:
+
+1. Authentication → URL Configuration: Site URL과 Redirect URLs에 `http://localhost:3000/**`, 배포 주소 `/**` 추가
+2. Authentication → Emails → SMTP: 기본 메일 발송은 Supabase 조직 멤버 주소로만 가고 시간당 발송량도 적습니다. 학생들이 쓰려면 별도 SMTP(Resend 등) 연결이 필요합니다.
+
 ## 화면
 
 | 경로 | 화면 |
@@ -28,9 +48,10 @@ http://localhost:3000 에서 확인합니다.
 | `/courses` | 과목 찾기: 전공·교양 / 자격증·어학 탭, 단과대학·분야 필터, 정렬 |
 | `/courses/[courseId]` | 과목(분반) 페이지: 강의 목록, 강사가 없을 때 빈 화면 |
 | `/lectures/[lectureId]` | 강의 상세: 맛보기, 성적 인증 배지, 커리큘럼, 후기, 결제 옵션(영상/스터디반) |
-| `/watch/[lectureId]` | 시청: 학번 워터마크, 챕터 목록, 진도율 |
-| `/instructor` | 강사 센터: 인증 상태, 판매·정산, 강의 업로드 폼 |
-| `/admin` | 운영자: 성적 인증 승인/반려 대기열 |
+| `/login` | 고려대 메일로 로그인 링크 받기 |
+| `/watch/[lectureId]` | 시청 (로그인 필요): 내 학번 워터마크, 챕터 목록, 진도율(예시) |
+| `/instructor` | 강사 센터 (로그인 필요, 내용은 예시): 인증 상태, 판매·정산, 강의 업로드 폼 |
+| `/admin` | 운영자 (운영자만, 내용은 예시): 성적 인증 승인/반려 대기열 |
 
 ## 데이터
 
@@ -73,7 +94,7 @@ Supabase CLI를 쓰기 시작하면 `supabase migration repair --status applied 
 
 1. ~~데이터 접근 계층 분리~~
 2. ~~Supabase 프로젝트 연결: 마이그레이션·시드 적용, 공개 화면을 Supabase 조회로 교체~~
-3. 학교 이메일 인증(Supabase Auth), `/instructor`·`/admin`·`/watch` 접근 제어
+3. ~~학교 이메일 인증(Supabase Auth), `/instructor`·`/admin`·`/watch` 접근 제어~~
 4. 성적 캡처 업로드(비공개 Storage) → 운영자 승인/반려 → 캡처 삭제
 5. 결제: 그로블 상품 링크, `app/api/webhooks/groble`에서 수강권 발급, 환불 규칙
 6. 시청: 스트리밍 서비스 플레이어 + 서명된 재생 토큰, 진도 기록

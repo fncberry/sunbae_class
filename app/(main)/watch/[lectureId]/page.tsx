@@ -1,22 +1,32 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { Play } from "lucide-react";
-import { getLecture, listLectureIds } from "@/lib/data";
+import { requireUser, viewerLabel } from "@/lib/auth";
+import { getLecture } from "@/lib/data";
 
-// TODO(인증 단계): 수강권 확인이 들어가면 이 페이지는 요청 시점 렌더링으로 바뀐다.
-export async function generateStaticParams() {
-  const ids = await listLectureIds();
-  return ids.map((lectureId) => ({ lectureId }));
-}
+export const metadata: Metadata = { robots: { index: false } };
 
-// 목업: 로그인한 수강생 (실제로는 Supabase 세션에서 가져옴)
-const viewer = { studentId: "2026xxxx12" };
+// 목업: 진도는 5·6단계에서 chapter_progress로 교체
 const currentIndex = 3;
 
-export default async function WatchPage(props: PageProps<"/watch/[lectureId]">) {
-  const { lectureId } = await props.params;
+export default function WatchPage(props: PageProps<"/watch/[lectureId]">) {
+  // 로그인한 사람마다 다른 화면(워터마크, 진도)이라 전부 요청 시점에 그린다
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-6xl px-6 pt-8" aria-busy="true"><div className="mt-10 aspect-video rounded-ui bg-wash lg:w-[calc(100%-340px)]" /></div>}>
+      <WatchContent params={props.params} />
+    </Suspense>
+  );
+}
+
+async function WatchContent({ params }: { params: PageProps<"/watch/[lectureId]">["params"] }) {
+  const { lectureId } = await params;
+  const user = await requireUser(`/watch/${lectureId}`);
   const lecture = await getLecture(lectureId);
   if (!lecture) notFound();
+  // TODO(5단계 결제): 수강권(enrollments)이 없으면 강의 상세로 보낸다
+  const viewer = viewerLabel(user);
 
   const { course, instructor } = lecture;
   const total = lecture.chapters.length;
@@ -39,7 +49,7 @@ export default async function WatchPage(props: PageProps<"/watch/[lectureId]">) 
             <div className="pointer-events-none absolute inset-0" aria-hidden>
               {["left-[8%] top-[14%]", "right-[10%] top-[46%]", "left-[32%] bottom-[18%]"].map((pos) => (
                 <span key={pos} className={`absolute text-sm text-paper/15 ${pos}`}>
-                  {viewer.studentId}
+                  {viewer}
                 </span>
               ))}
             </div>
