@@ -1,11 +1,26 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Upload } from "lucide-react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { requireUser } from "@/lib/auth";
 import { getMyInstructorDashboard } from "@/lib/data";
 import { courseLabel, instructorMeta, won } from "@/lib/format";
 
-export default async function InstructorPage() {
+export const metadata: Metadata = { title: "강사 센터 | 선배클래스", robots: { index: false } };
+
+export default function InstructorPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" aria-busy="true" />}>
+      <InstructorDashboard />
+    </Suspense>
+  );
+}
+
+async function InstructorDashboard() {
+  await requireUser("/instructor");
+  // TODO(4단계): 로그인한 사용자의 instructors 행 기준으로 교체. 강사가 아니면 지원 화면을 보여준다.
   const {
     instructor: me,
     verifiedCourse,
@@ -29,6 +44,9 @@ export default async function InstructorPage() {
       ]}
     >
       <div className="max-w-5xl px-8 py-12">
+        <p className="mb-6 rounded-ui bg-wash px-4 py-3 text-sm text-ink-soft">
+          예시 화면이에요. 강사 지원과 성적 인증은 다음 단계에서 열려요.
+        </p>
         <h1 className="font-serif text-3xl font-bold">{me.name}님의 강사 센터</h1>
         <p className="mt-2 text-ink-soft">
           {instructorMeta(me)}

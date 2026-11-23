@@ -69,8 +69,16 @@ check("profiles 안 보임", (await one("anon", null, "select count(*)::int n fr
 check("orders 조회 불가", !!(await rejects("anon", null, "select * from orders")) || (await one("anon", null, "select count(*)::int n from orders")).n === 0);
 check("강의 직접 추가 불가", !!(await rejects("anon", null, "insert into lectures (id, course_id, instructor_id, title, price) values ('x','cose213','jung','x',1000)")));
 
+console.log("\n[학교 이메일 제한]");
+check("다른 도메인 가입 불가", !!(await rejects("postgres", null, "insert into auth.users (id, email) values (gen_random_uuid(), 'a@gmail.com')")));
+check("비슷한 도메인 가입 불가", !!(await rejects("postgres", null, "insert into auth.users (id, email) values (gen_random_uuid(), 'a@fakekorea.ac.kr')")));
+check("하위 도메인 가입 불가", !!(await rejects("postgres", null, "insert into auth.users (id, email) values (gen_random_uuid(), 'a@mail.korea.ac.kr')")));
+check("이메일 없는 가입 불가", !!(await rejects("postgres", null, "insert into auth.users (id, email) values (gen_random_uuid(), null)")));
+
 console.log("\n[가입 + 프로필]");
-await as("postgres", null, `insert into auth.users (id, email) values ($1,'s1@school.ac.kr'),($2,'s2@school.ac.kr'),($3,'t1@school.ac.kr'),($4,'a1@school.ac.kr')`, [S1, S2, T1, A1]);
+await as("postgres", null, `insert into auth.users (id, email) values ($1,'s1@korea.ac.kr'),($2,'s2@korea.ac.kr'),($3,'t1@Korea.AC.kr'),($4,'a1@korea.ac.kr')`, [S1, S2, T1, A1]);
+check("학교 이메일을 다른 도메인으로 변경 불가", !!(await rejects("postgres", null, "update auth.users set email='s1@gmail.com' where id=$1", [S1])));
+check("대소문자 섞인 학교 이메일 허용", (await one("postgres", null, "select count(*)::int n from auth.users where email='t1@Korea.AC.kr'")).n === 1);
 check("가입 시 profiles 자동 생성", (await one("postgres", null, "select count(*)::int n from profiles")).n === 4);
 await as("postgres", null, "update profiles set role='admin' where id=$1", [A1]);
 check("본인 프로필만 보임", (await one("authenticated", S1, "select count(*)::int n from profiles")).n === 1);
