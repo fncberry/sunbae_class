@@ -45,8 +45,18 @@ function CatalogWithUrlState(props: Props) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 홈 검색(?q=)으로 들어왔고 카테고리를 고르지 않았으면, 결과가 있는 첫 카테고리로 연다
+  const q = params.get("q")?.trim() ?? "";
+  let category = normalizeCategory(params.get("c"), props.courses);
+  if (q && !params.get("c")) {
+    const hit = ["major", "liberal", "cert"].find((k) =>
+      props.lectures.some((l) => courseInCategory(l.course, k) && matchesQuery(l, q)),
+    );
+    if (hit) category = hit;
+  }
+
   const state: State = {
-    category: normalizeCategory(params.get("c"), props.courses),
+    category,
     dept: params.get("d"),
     sort: (Object.keys(SORT_LABEL) as Sort[]).includes(params.get("sort") as Sort) ? (params.get("sort") as Sort) : "popular",
     view: params.get("view") === "list" ? "list" : "grid",
@@ -62,7 +72,7 @@ function CatalogWithUrlState(props: Props) {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  return <CatalogView {...props} state={state} onUpdate={update} />;
+  return <CatalogView {...props} state={state} onUpdate={update} initialQuery={q} />;
 }
 
 /** 카테고리·학과 링크. 정렬과 보기 방식은 유지한다. */
@@ -81,8 +91,13 @@ function CatalogView({
   lectures,
   state,
   onUpdate,
-}: Props & { state: State; onUpdate?: (patch: Partial<Pick<State, "sort" | "view">>) => void }) {
-  const [query, setQuery] = useState("");
+  initialQuery = "",
+}: Props & {
+  state: State;
+  onUpdate?: (patch: Partial<Pick<State, "sort" | "view">>) => void;
+  initialQuery?: string;
+}) {
+  const [query, setQuery] = useState(initialQuery);
   const { category, sort, view } = state;
   const asideRef = useRef<HTMLElement>(null);
 

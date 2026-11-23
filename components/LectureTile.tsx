@@ -5,11 +5,11 @@ import { LectureCover } from "./LectureCover";
 import { VerifiedBadge } from "./VerifiedBadge";
 
 /** 강의 목록 그리드의 카드 한 장 */
-export function LectureTile({ lecture }: { lecture: LectureWithRelations }) {
+export function LectureTile({ lecture, className }: { lecture: LectureWithRelations; className?: string }) {
   const { course, instructor } = lecture;
 
   return (
-    <li>
+    <li className={className}>
       <Link href={`/lectures/${lecture.id}`} className="group block">
         <LectureCover course={course} />
         <h3 className="mt-3 line-clamp-2 min-h-[2.8em] text-[15px] font-medium leading-[1.4] decoration-1 underline-offset-4 group-hover:underline">

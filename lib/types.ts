@@ -77,9 +77,6 @@ export type Review = {
   date: string;
 };
 
-/** 과목 목록 화면용: 과목 + 강의 수 + 최저가 */
-export type CatalogCourse = Course & { lectureCount: number; minPrice: number | null };
-
 export type MonthlySales = { month: string; count: number };
 
 export type VerificationRequest = {
