@@ -32,11 +32,6 @@ async function UserMenu() {
 
   return (
     <div className="flex items-center gap-4 text-sm">
-      {!user.onboarded && (
-        <Link href="/onboarding" className="font-medium text-pen underline underline-offset-4">
-          가입 마무리
-        </Link>
-      )}
       <span className="hidden text-ink-soft sm:inline" title={user.email}>
         {user.email.split("@")[0]}
         {user.role === "admin" && (
