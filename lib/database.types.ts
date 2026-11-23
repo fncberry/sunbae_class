@@ -456,22 +456,31 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          major: string | null
+          onboarded_at: string | null
           role: Database["public"]["Enums"]["user_role"]
           student_id: string | null
+          terms_agreed_at: string | null
         }
         Insert: {
           created_at?: string
           email: string
           id: string
+          major?: string | null
+          onboarded_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           student_id?: string | null
+          terms_agreed_at?: string | null
         }
         Update: {
           created_at?: string
           email?: string
           id?: string
+          major?: string | null
+          onboarded_at?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           student_id?: string | null
+          terms_agreed_at?: string | null
         }
         Relationships: []
       }

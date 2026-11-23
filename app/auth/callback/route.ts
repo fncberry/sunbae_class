@@ -4,7 +4,7 @@
 //   학교 메일이 아니면 DB 트리거가 가입을 막고, Supabase는 "Database error saving new user"를 돌려준다.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { safeNextPath } from "@/lib/auth";
+import { onboardingPath, safeNextPath } from "@/lib/auth";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -26,10 +26,18 @@ export async function GET(request: NextRequest) {
   if (!code) return toLogin("failed");
 
   const supabase = await createServerSupabase();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     console.error("[auth/callback] exchangeCodeForSession", error.code, error.message);
     return toLogin("failed");
   }
-  return NextResponse.redirect(new URL(next, origin));
+
+  // 처음 로그인했거나 온보딩을 안 마쳤으면 온보딩부터
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarded_at")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  const target = profile?.onboarded_at ? next : onboardingPath(next);
+  return NextResponse.redirect(new URL(target, origin));
 }
