@@ -14,6 +14,9 @@ export type CurrentUser = {
   email: string;
   role: Enums<"user_role">;
   studentId: string | null;
+  major: string | null;
+  /** 학번·학과·약관 동의를 마쳤는지 */
+  onboarded: boolean;
 };
 
 /** 로그인한 사용자. 없으면 null. 한 요청 안에서는 한 번만 조회한다. */
@@ -25,19 +28,40 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, email, role, student_id")
+    .select("id, email, role, student_id, major, onboarded_at")
     .eq("id", data.claims.sub)
     .maybeSingle();
   if (!profile) return null;
 
-  return { id: profile.id, email: profile.email, role: profile.role, studentId: profile.student_id };
+  return {
+    id: profile.id,
+    email: profile.email,
+    role: profile.role,
+    studentId: profile.student_id,
+    major: profile.major,
+    onboarded: profile.onboarded_at !== null,
+  };
 });
 
-/** 로그인이 필요한 화면. 로그인 안 했으면 로그인 페이지로 보내고, 끝나면 nextPath로 돌아온다. */
-export async function requireUser(nextPath: string): Promise<CurrentUser> {
+/** 로그인만 확인한다. 온보딩 화면처럼 온보딩 전에도 열려야 하는 곳에서 쓴다. */
+export async function requireSignedIn(nextPath: string): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(safeNextPath(nextPath))}`);
   return user;
+}
+
+/**
+ * 로그인 + 온보딩이 필요한 화면. 로그인 안 했으면 로그인으로, 온보딩 전이면 온보딩으로 보내고,
+ * 끝나면 nextPath로 돌아온다. (시청 워터마크에 학번이 필요하므로 온보딩 전에는 열지 않는다)
+ */
+export async function requireUser(nextPath: string): Promise<CurrentUser> {
+  const user = await requireSignedIn(nextPath);
+  if (!user.onboarded) redirect(onboardingPath(nextPath));
+  return user;
+}
+
+export function onboardingPath(nextPath: string): string {
+  return `/onboarding?next=${encodeURIComponent(safeNextPath(nextPath))}`;
 }
 
 /** 운영자 전용 화면. 운영자가 아니면 화면이 있다는 것도 알리지 않는다(404). */

@@ -162,6 +162,29 @@ check("수강 중 강의 진도 기록", (await as("authenticated", S1, "insert 
 check("수강 안 한 강의 진도 기록 불가", !!(await rejects("authenticated", S2, "insert into chapter_progress (user_id, chapter_id) select $1, id from chapters where lecture_id='ds-final-tree-graph' and position=1", [S2])));
 check("남의 진도 안 보임", (await one("authenticated", S2, "select count(*)::int n from chapter_progress")).n === 0);
 
+console.log("\n[온보딩]");
+{
+  const prof = (uid) => one("postgres", null, "select student_id, major, terms_agreed_at, onboarded_at from profiles where id=$1", [uid]);
+  check("처음엔 온보딩 전", (await prof(S2)).onboarded_at === null);
+  check("학번 형식 아니면 거부", !!(await rejects("authenticated", S2, "update profiles set student_id='12345' where id=$1", [S2])));
+  check("학과가 너무 짧으면 거부", !!(await rejects("authenticated", S2, "update profiles set major=' ' || 'a' where id=$1", [S2])));
+  check("다른 사람 학번은 못 씀", !!(await rejects("authenticated", S2, "update profiles set student_id='2026123412' where id=$1", [S2])));
+  check("onboarded_at 직접 쓰기 불가", !!(await rejects("authenticated", S2, "update profiles set onboarded_at=now() where id=$1", [S2])));
+  await as("authenticated", S2, "update profiles set student_id='2025320001', major='  경영학과 ' where id=$1", [S2]);
+  check("약관 동의 전에는 온보딩 미완료", (await prof(S2)).onboarded_at === null);
+  await as("authenticated", S2, "update profiles set terms_agreed_at='2000-01-01' where id=$1", [S2]);
+  const done = await prof(S2);
+  check("동의하면 온보딩 완료", done.onboarded_at !== null);
+  check("동의 시각은 서버 시각 (보낸 값 무시)", new Date(done.terms_agreed_at).getFullYear() > 2000, String(done.terms_agreed_at));
+  check("학과 앞뒤 공백 정리", done.major === "경영학과", done.major);
+  check("온보딩 후 학번 변경 불가", !!(await rejects("authenticated", S2, "update profiles set student_id='2025320002' where id=$1", [S2])));
+  check("온보딩 후 학과 변경은 가능", (await as("authenticated", S2, "update profiles set major='경제학과' where id=$1 returning id", [S2])).rows.length === 1);
+  await as("authenticated", S2, "update profiles set terms_agreed_at=null where id=$1", [S2]);
+  check("동의 시각·완료 시각은 지워지지 않음", (await prof(S2)).onboarded_at !== null && (await prof(S2)).terms_agreed_at !== null);
+  check("운영자(SQL)는 학번 정정 가능", (await as("postgres", null, "update profiles set student_id='2025320002' where id=$1 returning id", [S2])).rows.length === 1);
+  check("운영자도 형식은 지켜야 함", !!(await rejects("postgres", null, "update profiles set student_id='abc' where id=$1", [S2])));
+}
+
 console.log("\n[헬퍼 함수]");
 check("트리거 함수 직접 호출 불가", !!(await rejects("authenticated", S1, "select private.sync_review_counters()")));
 check("헬퍼가 public(API 노출 스키마)에 없음", (await one("postgres", null, "select count(*)::int n from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'")).n === 0);
