@@ -174,6 +174,7 @@ export type Database = {
       enrollments: {
         Row: {
           created_at: string
+          id: string
           lecture_id: string
           option: Database["public"]["Enums"]["purchase_option"]
           order_id: string | null
@@ -182,6 +183,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          id?: string
           lecture_id: string
           option: Database["public"]["Enums"]["purchase_option"]
           order_id?: string | null
@@ -190,6 +192,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          id?: string
           lecture_id?: string
           option?: Database["public"]["Enums"]["purchase_option"]
           order_id?: string | null

@@ -138,12 +138,90 @@ check("스터디반 정원 초과 시 발급 거부", !!(await rejects("service_
 check("스터디반 없는 강의에 study 발급 거부", !!(await rejects("service_role", null, "insert into enrollments (user_id, lecture_id, option) values ($1,'phys-rotation','study')", [S2])));
 
 console.log("\n[후기]");
-check("수강생은 후기 작성 가능", (await as("authenticated", S1, "insert into reviews (lecture_id, user_id, author_label, rating, body) values ('ds-final-tree-graph',$1,'컴퓨터학과 26학번',5,'좋아요') returning id", [S1])).rows.length === 1);
-const ds4 = await one("anon", null, "select review_count, rating_sum from lectures where id='ds-final-tree-graph'");
-check("후기 카운터 +1", ds4.review_count === 39 && ds4.rating_sum === 191, JSON.stringify(ds4));
-check("수강 안 한 강의는 후기 작성 불가", !!(await rejects("authenticated", S2, "insert into reviews (lecture_id, user_id, author_label, rating, body) values ('ds-final-tree-graph',$1,'x',1,'x')", [S2])));
-check("남 이름으로 후기 작성 불가", !!(await rejects("authenticated", S2, "insert into reviews (lecture_id, user_id, author_label, rating, body) values ('ds-final-tree-graph',$1,'x',1,'x')", [S1])));
-check("남의 후기 수정 안 됨", (await as("authenticated", S2, "update reviews set body='x' where user_id=$1 returning id", [S1])).rows.length === 0);
+await as("postgres", null, "update profiles set name='수강생', nickname='수강생1', major='컴퓨터학과', terms_agreed_at=now(), onboarded_at=now() where id=$1", [S1]);
+{
+  const mine = await one("authenticated", S1, "insert into reviews (lecture_id, rating, body) values ('ds-final-tree-graph',5,'  좋아요  ') returning user_id, author_label, body");
+  check("수강생 후기: 작성자·표시 이름은 트리거가 채움", mine.user_id === S1 && mine.author_label === "컴퓨터학과 26학번" && mine.body === "좋아요", JSON.stringify(mine));
+  const ds4 = await one("anon", null, "select review_count, rating_sum from lectures where id='ds-final-tree-graph'");
+  check("후기 카운터 +1", ds4.review_count === 39 && ds4.rating_sum === 191, JSON.stringify(ds4));
+  check("작성자를 직접 정할 수 없음", !!(await rejects("authenticated", S1, "insert into reviews (lecture_id, user_id, rating, body) values ('calc-integration',$1,5,'x')", [S1])));
+  check("표시 이름을 직접 정할 수 없음", !!(await rejects("authenticated", S1, "insert into reviews (lecture_id, author_label, rating, body) values ('calc-integration','운영자',5,'x')")));
+  check("수강 안 한 강의는 후기 작성 불가", !!(await rejects("authenticated", S1, "insert into reviews (lecture_id, rating, body) values ('calc-integration',5,'x')")));
+  check("온보딩 전에는 후기 작성 불가", !!(await rejects("authenticated", S2, "insert into reviews (lecture_id, rating, body) values ('ds-final-tree-graph',1,'x')")));
+  check("한 강의에 후기는 하나", !!(await rejects("authenticated", S1, "insert into reviews (lecture_id, rating, body) values ('ds-final-tree-graph',4,'또')")));
+  check("빈 후기 거부", !!(await rejects("authenticated", S1, "update reviews set body='   ' where user_id=$1", [S1])));
+  check("1000자 넘는 후기 거부", !!(await rejects("authenticated", S1, "update reviews set body=repeat('가', 1001) where user_id=$1", [S1])));
+  await as("authenticated", S1, "update reviews set body='고쳤어요', rating=4 where user_id=$1", [S1]);
+  const edited = await one("postgres", null, "select body, rating, author_label from reviews where user_id=$1", [S1]);
+  const ds5 = await one("anon", null, "select review_count, rating_sum from lectures where id='ds-final-tree-graph'");
+  check("후기 수정: 본문·별점만 바뀌고 카운터 반영", edited.body === "고쳤어요" && edited.rating === 4 && edited.author_label === "컴퓨터학과 26학번" && ds5.review_count === 39 && ds5.rating_sum === 190, JSON.stringify({ edited, ds5 }));
+  check("남의 후기 수정 안 됨", (await as("authenticated", S2, "update reviews set body='x' where user_id=$1 returning id", [S1])).rows.length === 0);
+}
+
+console.log("\n[주문]");
+const P1 = "55555555-5555-5555-5555-555555555555"; // 구매자
+const P2 = "66666666-6666-6666-6666-666666666666"; // 온보딩 전
+await as("postgres", null, "insert into auth.users (id, email) values ($1,'p1@korea.ac.kr'),($2,'p2@korea.ac.kr')", [P1, P2]);
+await as("postgres", null, "update profiles set name='구매자', nickname='구매자1', student_id='2025990001', major='경영학과', terms_agreed_at=now(), onboarded_at=now() where id=$1", [P1]);
+{
+  const order = (uid, lecture, option) => one("authenticated", uid, "insert into orders (lecture_id, option) values ($1, $2) returning id, user_id, amount, status, provider", [lecture, option]);
+  const price = await one("postgres", null, "select price, study_group_price from lectures where id='ds-final-tree-graph'");
+  check("온보딩 전에는 주문 불가", !!(await rejects("authenticated", P2, "insert into orders (lecture_id, option) values ('ds-final-tree-graph','video')")));
+  const o1 = await order(P1, "ds-final-tree-graph", "video");
+  check("주문자·금액·상태는 서버가 정함", o1.user_id === P1 && o1.amount === price.price && o1.status === "pending" && o1.provider === "groble", JSON.stringify(o1));
+  check("스터디반 주문은 스터디반 가격", (await order(P1, "ds-final-tree-graph", "study")).amount === price.study_group_price);
+  check("금액을 직접 정해서 주문 불가", !!(await rejects("authenticated", P1, "insert into orders (lecture_id, option, amount) values ('ds-final-tree-graph','video',1)")));
+  check("남의 이름으로 주문 불가", !!(await rejects("authenticated", P1, "insert into orders (lecture_id, option, user_id) values ('ds-final-tree-graph','video',$1)", [P2])));
+  check("결제 완료 상태로 주문 생성 불가", !!(await rejects("authenticated", P1, "insert into orders (lecture_id, option, status) values ('ds-final-tree-graph','video','paid')")));
+  check("스터디반 없는 강의는 스터디반 주문 불가", !!(await rejects("authenticated", P1, "insert into orders (lecture_id, option) values ('phys-rotation','study')")));
+  check("정원 찬 스터디반 주문 불가", !!(await rejects("authenticated", P1, "insert into orders (lecture_id, option) values ('calc-integration','study')")));
+  await as("postgres", null, "insert into lectures (id, course_id, instructor_id, title, price, status) values ('hidden-x','cose213','jung','판매 멈춘 강의',3000,'hidden')");
+  check("판매 중이 아닌 강의는 주문 불가", !!(await rejects("authenticated", P1, "insert into orders (lecture_id, option) values ('hidden-x','video')")));
+  check("이미 수강 중이면 주문 불가", !!(await rejects("authenticated", S1, "insert into orders (lecture_id, option) values ('ds-final-tree-graph','video')")));
+  check("남의 주문은 안 보임", (await one("authenticated", P2, "select count(*)::int n from orders")).n === 0);
+  check("학생이 결제 완료로 바꿀 수 없음", !!(await rejects("authenticated", P1, "update orders set status='paid' where id=$1", [o1.id])));
+
+  // 웹훅(service_role): 결제 완료 → 수강권
+  await as("service_role", null, "update orders set status='paid', provider_order_id='groble-p1' where id=$1", [o1.id]);
+  check("결제 완료 시각 기록", (await one("postgres", null, "select paid_at from orders where id=$1", [o1.id])).paid_at !== null);
+  check("결제된 주문을 대기로 되돌릴 수 없음", !!(await rejects("service_role", null, "update orders set status='pending' where id=$1", [o1.id])));
+  check("주문 금액은 바꿀 수 없음", !!(await rejects("service_role", null, "update orders set amount=1 where id=$1", [o1.id])));
+  await as("service_role", null, "insert into enrollments (user_id, lecture_id, order_id, option) values ($1,'ds-final-tree-graph',$2,'video')", [P1, o1.id]);
+  check("같은 강의 수강권은 하나만", !!(await rejects("service_role", null, "insert into enrollments (user_id, lecture_id, option) values ($1,'ds-final-tree-graph','video')", [P1])));
+  check("같은 주문으로 수강권 두 번 발급 불가", !!(await rejects("service_role", null, "insert into enrollments (user_id, lecture_id, order_id, option) values ($1,'calc-integration',$2,'video')", [P1, o1.id])));
+
+  // 환불 → 재구매
+  await as("service_role", null, "update orders set status='refunded' where id=$1", [o1.id]);
+  await as("service_role", null, "update enrollments set revoked_at=now() where order_id=$1", [o1.id]);
+  check("환불 시각 기록", (await one("postgres", null, "select refunded_at from orders where id=$1", [o1.id])).refunded_at !== null);
+  check("환불된 주문은 다시 결제 완료로 못 바꿈", !!(await rejects("service_role", null, "update orders set status='paid' where id=$1", [o1.id])));
+  const o3 = await order(P1, "ds-final-tree-graph", "video");
+  check("환불 뒤 다시 주문 가능", o3.status === "pending");
+  await as("service_role", null, "update orders set status='paid' where id=$1", [o3.id]);
+  await as("service_role", null, "insert into enrollments (user_id, lecture_id, order_id, option) values ($1,'ds-final-tree-graph',$2,'video')", [P1, o3.id]);
+  const hist = await one("postgres", null, "select count(*)::int total, count(*) filter (where revoked_at is null)::int active from enrollments where user_id=$1 and lecture_id='ds-final-tree-graph'", [P1]);
+  check("재구매하면 새 수강권, 이전 기록은 남음", hist.total === 2 && hist.active === 1, JSON.stringify(hist));
+
+  // 스터디반 정원: 되살리거나 옵션을 바꿀 때도 확인
+  await as("service_role", null, "insert into enrollments (user_id, lecture_id, option) values ($1,'acct-statement','study')", [P1]);
+  await as("service_role", null, "update enrollments set revoked_at=now() where user_id=$1 and lecture_id='acct-statement'", [P1]);
+  await as("postgres", null, "update lectures set study_group_taken = study_group_capacity where id='acct-statement'");
+  check("정원이 차면 환불된 스터디반 수강권을 되살릴 수 없음", !!(await rejects("service_role", null, "update enrollments set revoked_at=null where user_id=$1 and lecture_id='acct-statement'", [P1])));
+  await as("service_role", null, "insert into enrollments (user_id, lecture_id, option) values ($1,'acct-statement','video')", [P1]);
+  check("정원이 차면 영상 수강권을 스터디반으로 바꿀 수 없음", !!(await rejects("service_role", null, "update enrollments set option='study' where user_id=$1 and lecture_id='acct-statement' and revoked_at is null", [P1])));
+  check("이미 자리를 차지한 스터디반 수강권은 다시 세지 않음", (await as("service_role", null, "update enrollments set revoked_at=null where user_id=$1 and lecture_id='ds-final-tree-graph' and revoked_at is null returning id", [S1])).rows.length === 1);
+
+  // 판매를 멈춘 강의
+  await as("service_role", null, "insert into enrollments (user_id, lecture_id, option) values ($1,'hidden-x','video')", [P1]);
+  check("판매를 멈춘 강의도 수강생은 봄", (await one("authenticated", P1, "select count(*)::int n from lectures where id='hidden-x'")).n === 1);
+  check("수강생이 아니면 판매 멈춘 강의 안 보임", (await one("authenticated", P2, "select count(*)::int n from lectures where id='hidden-x'")).n === 0 && (await one("anon", null, "select count(*)::int n from lectures where id='hidden-x'")).n === 0);
+}
+
+console.log("\n[공개 컬럼]");
+check("익명은 후기 작성자 id를 못 봄", !!(await rejects("anon", null, "select user_id from reviews")));
+check("익명은 강사 계정 id를 못 봄", !!(await rejects("anon", null, "select user_id from instructors")));
+check("익명은 인증 처리자·캡처 경로를 못 봄", !!(await rejects("anon", null, "select reviewed_by from grade_verifications")) && !!(await rejects("anon", null, "select proof_path from grade_verifications")));
+check("익명도 공개 컬럼은 읽음", (await one("anon", null, "select count(id)::int n from instructors")).n > 0 && (await one("anon", null, "select count(author_label)::int n from reviews")).n > 0);
 
 console.log("\n[강사 지원 → 인증 → 강의 올리기]");
 // 강사 지원은 가입 마무리(온보딩)를 끝낸 사람만. 이 테스트에서는 SQL로 바로 마친 상태로 둔다
@@ -258,6 +336,9 @@ console.log("\n[강의 검수]");
 console.log("\n[강사 공개 프로필]");
 await as("authenticated", T1, "update profiles set nickname='알고마스터' where id=$1", [T1]);
 check("닉네임을 바꾸면 강사 이름도 바뀜", (await one("anon", null, "select name from instructors where id='t1'")).name === "알고마스터");
+
+console.log("\n[내 강의 구매]");
+check("내 강의는 주문 불가", !!(await rejects("authenticated", T1, "insert into orders (lecture_id, option) values ('t1-algo','video')")));
 
 console.log("\n[영상 접근]");
 await as("service_role", null, `insert into chapter_media (chapter_id, provider, asset_id)
