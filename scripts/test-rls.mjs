@@ -385,6 +385,80 @@ console.log("\n[온보딩]");
   check("운영자도 형식은 지켜야 함", !!(await rejects("postgres", null, "update profiles set student_id='abc' where id=$1", [S2])));
 }
 
+console.log("\n[그로블 웹훅]");
+{
+  const W1 = "77777777-7777-7777-7777-777777777777"; // 그로블로 결제하는 학생
+  await as("postgres", null, "insert into auth.users (id, email) values ($1,'w1@korea.ac.kr')", [W1]);
+  await as("postgres", null, "update profiles set name='결제자', nickname='결제자1', student_id='2025990002', major='경제학과', terms_agreed_at=now(), onboarded_at=now() where id=$1", [W1]);
+  const order = (lecture) => one("authenticated", W1, "insert into orders (lecture_id, option) values ($1,'video') returning id, amount", [lecture]);
+  const event = (id, type, object) =>
+    one("service_role", null, "insert into payment_events (id, type, payload) values ($1, $2, $3) returning result, order_id, merchant_uid, note", [
+      id, type, JSON.stringify({ id: `evt_${id}`, type, version: "2026-04-30", occurredAt: "2026-11-25T10:00:00+09:00", data: { object } }),
+    ]);
+  const orderRow = (id) => one("postgres", null, "select status, provider_order_id, paid_at, refunded_at from orders where id=$1", [id]);
+  const active = async (lecture) => (await one("postgres", null, "select count(*)::int n from enrollments where user_id=$1 and lecture_id=$2 and revoked_at is null", [W1, lecture])).n;
+  const salesOf = async (lecture) => (await one("postgres", null, "select sales_count from lectures where id=$1", [lecture])).sales_count;
+
+  const o1 = await order("phys-rotation");
+  const sales0 = await salesOf("phys-rotation");
+  const paid = (ref, merchant, amount) => ({ merchantUid: merchant, sellerReference: ref, pricing: { currency: "KRW", finalAmount: amount } });
+
+  const wrong = await event("k-amount", "payment.completed", paid(o1.id, "m-x", o1.amount - 1000));
+  check("금액이 다르면 수강권 안 주고 확인 대기", wrong.result === "needs_review" && (await orderRow(o1.id)).status === "pending" && (await active("phys-rotation")) === 0, JSON.stringify(wrong));
+  check("주문번호 없는 결제는 확인 대기", (await event("k-noref", "payment.completed", paid(undefined, "m-y", o1.amount))).result === "needs_review");
+  check("형식이 틀린 주문번호는 확인 대기", (await event("k-badref", "payment.completed", paid("ord_1", "m-z", o1.amount))).result === "needs_review");
+
+  const ok = await event("k-paid", "payment.completed", paid(o1.id, "m-1", o1.amount));
+  const r1 = await orderRow(o1.id);
+  check("결제 완료 웹훅 → 주문 결제 완료 + 그로블 결제번호 저장", ok.result === "applied" && ok.order_id === o1.id && r1.status === "paid" && r1.provider_order_id === "m-1" && r1.paid_at !== null, JSON.stringify({ ok, r1 }));
+  check("결제 완료 웹훅 → 수강권 발급 + 판매 수 증가", (await active("phys-rotation")) === 1 && (await salesOf("phys-rotation")) === sales0 + 1);
+  check("같은 결제가 다른 키로 또 와도 한 번만 반영", (await event("k-paid-retry", "payment.completed", paid(o1.id, "m-1", o1.amount))).result === "duplicate" && (await active("phys-rotation")) === 1);
+  check("같은 키로 다시 오면 거부(중복 키)", !!(await rejects("service_role", null, "insert into payment_events (id, type, payload) values ('k-paid','payment.completed','{}')")));
+  check("결제된 주문에 다른 결제가 또 오면 확인 대기", (await event("k-paid-twice", "payment.completed", paid(o1.id, "m-2", o1.amount))).result === "needs_review");
+
+  const o2 = await order("calc-integration");
+  const taken = await event("k-taken", "payment.completed", paid(o2.id, "m-1", o2.amount));
+  check("이미 쓴 그로블 결제번호로는 발급 안 함(주문은 그대로)", taken.result === "needs_review" && (await orderRow(o2.id)).status === "pending", JSON.stringify(taken));
+
+  const cancelReq = await event("k-cancel", "payment.cancel_requested", { merchantUid: "m-1", cancelRequest: { detailReason: "  시험이 취소됐어요  " } });
+  check("환불 요청은 주문과 묶어 확인 대기", cancelReq.result === "needs_review" && cancelReq.order_id === o1.id && cancelReq.note.includes("시험이 취소됐어요"), JSON.stringify(cancelReq));
+
+  const partial = await event("k-partial", "payment.refunded", { merchantUid: "m-1", refund: { amount: 3000, partialRefund: true } });
+  check("부분 환불은 수강권 유지 + 확인 대기", partial.result === "needs_review" && (await active("phys-rotation")) === 1 && (await orderRow(o1.id)).status === "paid");
+
+  const refund = await event("k-refund", "payment.refunded", { merchantUid: "m-1", refund: { amount: o1.amount, partialRefund: false } });
+  const r2 = await orderRow(o1.id);
+  check("환불 웹훅 → 주문 환불 + 수강권 회수 + 판매 수 감소", refund.result === "applied" && r2.status === "refunded" && r2.refunded_at !== null && (await active("phys-rotation")) === 0 && (await salesOf("phys-rotation")) === sales0, JSON.stringify({ refund, r2 }));
+  check("환불 웹훅이 또 와도 한 번만 반영", (await event("k-refund-retry", "payment.refunded", { merchantUid: "m-1", refund: { partialRefund: false } })).result === "duplicate");
+  check("모르는 결제의 환불은 확인 대기", (await event("k-refund-unknown", "payment.refunded", { merchantUid: "m-unknown" })).result === "needs_review");
+  check("다루지 않는 이벤트는 기록만", (await event("k-sub", "subscription_payment.completed", {})).result === "ignored");
+
+  check("학생은 웹훅 기록을 못 넣음", !!(await rejects("authenticated", W1, "insert into payment_events (id, type, payload) values ('k-fake','payment.completed','{}')")));
+  check("익명은 웹훅 기록을 못 넣음", !!(await rejects("anon", null, "insert into payment_events (id, type, payload) values ('k-fake','payment.completed','{}')")));
+  check("학생은 웹훅 기록이 안 보임", (await one("authenticated", W1, "select count(*)::int n from payment_events")).n === 0);
+  check("운영자는 웹훅 기록을 봄", (await one("authenticated", A1, "select count(*)::int n from payment_events")).n > 0);
+  check("운영자도 처리 결과는 못 바꿈", !!(await rejects("authenticated", A1, "update payment_events set result='applied' where id='k-amount'")));
+  await as("authenticated", A1, "update payment_events set resolved_at='2000-01-01' where id='k-amount'");
+  const resolved = await one("postgres", null, "select resolved_at, resolved_by from payment_events where id='k-amount'");
+  check("확인 표시: 시각·처리자는 서버가 채움", resolved.resolved_by === A1 && new Date(resolved.resolved_at).getFullYear() > 2000, JSON.stringify(resolved));
+  const ch = await one("postgres", null, "select id from chapters where lecture_id='phys-rotation' order by position limit 1");
+  await as("postgres", null, "insert into chapter_progress (user_id, chapter_id, completed) values ($1,$2,true)", [W1, ch.id]);
+  check("운영자는 환불 판단용 진도를 봄", (await one("authenticated", A1, "select count(*)::int n from chapter_progress where user_id=$1", [W1])).n === 1);
+  check("다른 학생 진도는 안 보임", (await one("authenticated", S1, "select count(*)::int n from chapter_progress where user_id=$1", [W1])).n === 0);
+  check("학생은 확인 표시 못 함",(await as("authenticated", W1, "update payment_events set resolved_at=now() where id='k-noref' returning id")).rows.length === 0);
+
+  console.log("\n[결제창 링크]");
+  const link = "https://groble.im/payment/abc-123";
+  check("학생은 결제창 링크 등록 불가", !!(await rejects("authenticated", W1, "insert into lecture_checkout_links (lecture_id, option, url) values ('phys-rotation','video',$1)", [link])));
+  await as("authenticated", A1, "insert into lecture_checkout_links (lecture_id, option, url) values ('phys-rotation','video',$1)", [link]);
+  check("운영자는 결제창 링크 등록", (await one("authenticated", W1, "select url from lecture_checkout_links where lecture_id='phys-rotation'")).url === link);
+  check("익명은 결제창 링크 못 봄", !!(await rejects("anon", null, "select * from lecture_checkout_links")));
+  check("그로블이 아닌 주소는 거부", !!(await rejects("authenticated", A1, "insert into lecture_checkout_links (lecture_id, option, url) values ('calc-integration','video','https://evil.example/groble.im/x')")));
+  check("http 주소는 거부", !!(await rejects("authenticated", A1, "insert into lecture_checkout_links (lecture_id, option, url) values ('calc-integration','video','http://groble.im/payment/x')")));
+  check("쿼리가 붙은 주소는 거부(ref는 서버가 붙임)", !!(await rejects("authenticated", A1, "insert into lecture_checkout_links (lecture_id, option, url) values ('calc-integration','video','https://groble.im/payment/x?ref=1')")));
+  check("학생은 링크 수정·삭제 못 함", (await as("authenticated", W1, "delete from lecture_checkout_links returning lecture_id")).rows.length === 0);
+}
+
 console.log("\n[헬퍼 함수]");
 check("트리거 함수 직접 호출 불가", !!(await rejects("authenticated", S1, "select private.sync_review_counters()")));
 check("헬퍼가 public(API 노출 스키마)에 없음", (await one("postgres", null, "select count(*)::int n from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'")).n === 0);

@@ -9,7 +9,7 @@
 - **고려대 구글 계정(@korea.ac.kr) 로그인**이 됩니다. 고려대 메일은 Google Workspace라 학교 메일 계정으로 구글 로그인을 합니다.
 - 처음 로그인하면 **온보딩**(이름·닉네임·학번·학과·개인정보 동의)을 거칩니다. 온보딩 전에는 `/instructor`·`/watch`·`/admin`이 열리지 않습니다.
 - 성적 인증(캡처 업로드 → 운영자 승인·반려 → 캡처 삭제)과 강의 검수가 됩니다.
-- 결제 준비: 결제 버튼이 pending 주문을 만들고 `/checkout`으로 보냅니다. 그로블 결제 확인(웹훅)과 수강권 발급은 5단계입니다.
+- 결제: 결제 버튼이 pending 주문을 만들고 `/checkout`에서 그로블 결제창(`?ref=주문 id`)으로 보냅니다. 그로블 웹훅이 결제 완료 시 수강권을 주고, 환불 시 회수합니다.
 - 수강생은 `/watch`에서 전체 강의를, 그 밖에는 맛보기만 봅니다. 영상 스트리밍은 아직 연결하지 않았습니다(6단계).
 
 ## 실행
@@ -21,6 +21,11 @@ npm run dev
 ```
 
 `.env.local` 값은 Supabase 대시보드 → Project Settings → API Keys에서 확인합니다. 빌드할 때도 DB를 읽으므로 배포 환경에도 같은 변수가 필요합니다.
+
+그로블 웹훅을 받으려면 서버 전용 변수 두 개가 더 필요합니다(이름에 `NEXT_PUBLIC_`을 붙이지 않음). 없으면 웹훅은 503으로 답하고 그로블이 다시 보냅니다.
+
+- `SUPABASE_SECRET_KEY`: Supabase secret 키(`sb_secret_…`). 웹훅 기록에만 씀(`lib/supabase/service.ts`)
+- `GROBLE_WEBHOOK_SECRET`: 그로블 내 스토어 → 연동 → 웹훅 등록 때 한 번 보여주는 시크릿
 
 http://localhost:3000 에서 확인합니다.
 
@@ -68,10 +73,11 @@ Supabase 대시보드에서 해야 하는 설정:
 | `/login` | 고려대 구글 계정으로 로그인 |
 | `/onboarding` | 가입 마무리 (로그인 필요): 이름·학과(학교 계정에서 미리 채움), 닉네임, 학번, 개인정보 수집·이용 동의 |
 | `/watch/[lectureId]` | 시청 (로그인 필요): 수강생·강의 주인·운영자는 전체, 그 밖에는 맛보기. `?c=위치`로 챕터 선택, 학번 워터마크, "다 봤어요" 진도 |
-| `/checkout/[orderId]` | 결제 (로그인 필요): 내 주문, 그로블 결제 링크(`GROBLE_CHECKOUT_URL`이 없으면 "아직 결제를 받을 수 없어요") |
+| `/checkout/[orderId]` | 결제 (로그인 필요): 내 주문, 그로블 결제창 링크(운영자가 등록하지 않았으면 "아직 결제를 받을 수 없어요") |
 | `/my` | 내 강의 (로그인 필요): 수강 중인 강의와 진도, 결제 내역 |
 | `/instructor` | 강사 센터 (로그인 필요): 성적 인증 신청, 내 신청 상태, 승인된 과목의 강의 초안·검수 요청 |
-| `/admin` | 운영자 (운영자만): 성적 인증 대기열, 캡처 열람(`/admin/proofs/[id]`), 강의 검수(`/admin/lectures`) |
+| `/admin` | 운영자 (운영자만): 성적 인증 대기열, 캡처 열람(`/admin/proofs/[id]`), 강의 검수(`/admin/lectures`), 결제(`/admin/payments`: 확인할 결제, 강의별 결제창 링크) |
+| `/api/webhooks/groble` | 그로블 웹훅 (POST, 서명 확인) |
 
 ## 데이터
 
@@ -83,7 +89,7 @@ Supabase 대시보드에서 해야 하는 설정:
 | `lib/data.ts` | 조회 함수. 공개 카탈로그는 Supabase(anon, RLS) + `"use cache"` + `cacheTag("catalog")` |
 | `lib/learning.ts` | 수강생: 수강권, 시청 화면, 진도, 주문 (캐시 없음) |
 | `lib/instructor-center.ts`, `lib/admin.ts` | 강사 센터, 운영자 화면 (캐시 없음) |
-| `lib/groble.ts` | 그로블 결제 링크 템플릿 |
+| `lib/groble.ts` | 그로블 결제창 링크(`?ref=`), 웹훅 서명 확인 |
 | `lib/supabase/public.ts` | 공개 데이터용 서버 클라이언트 (세션 없음) |
 | `lib/database.types.ts` | Supabase가 생성한 DB 타입 |
 | `lib/mock-data.ts` | 더미 데이터. `supabase/seed.sql`의 원본이자 강사 센터·운영자 화면의 임시 데이터 |
@@ -133,8 +139,21 @@ Supabase CLI를 쓰기 시작하면 `supabase migration repair --status applied 
 - 주문 상태는 pending → paid·cancelled, paid → refunded만. 금액·주문자·강의·방식은 바꿀 수 없음. `paid_at`·`refunded_at`은 자동 기록
 - 수강권(`enrollments`)은 `id`가 기본 키. 살아 있는 수강권은 `(user_id, lecture_id)`당 하나라서 환불(`revoked_at`) 뒤 다시 살 수 있음. 스터디반 정원은 되살리거나 옵션을 바꿀 때도 확인
 - 판매를 멈춘(`hidden`) 강의도 수강권이 있으면 볼 수 있음
-- 그로블 링크: 서버 환경 변수 `GROBLE_CHECKOUT_URL`에 템플릿. `{orderId}` `{lectureId}` `{option}` `{amount}` 자리에 값이 들어감(https만)
 - 로그인 뒤 돌아갈 주소(`safeNextPath`)는 URL로 해석해 같은 출처만 통과
+
+### 그로블 결제 (`20261125010000_groble_webhook`, `20261125020000_admin_progress`)
+
+- 결제창 링크: 강의·구매 방식마다 운영자가 `/admin/payments`에서 등록(`lecture_checkout_links`). `https://groble.im/…`만, `?` 없이. 그로블 상품 금액은 강의 가격과 같아야 함
+- `/checkout`은 링크 뒤에 `?ref=<주문 id>`를 붙임 → 결제 완료 웹훅의 `sellerReference`로 돌아옴
+- 웹훅: `X-Groble-Signature` = HEX(HMAC-SHA256(시크릿, `{timestamp}.{원문}`)), ±5분. 시크릿 재발급 뒤 24시간은 `X-Groble-Signature-Previous`도 허용
+- 서버는 `payment_events`에 원문을 넣기만 하고, 트리거 `private.apply_payment_event`가 한 트랜잭션으로 반영
+  - `payment.completed`: 주문번호·금액이 맞으면 주문 paid(`provider_order_id` = 그로블 `merchantUid`) + 수강권 발급
+  - `payment.refunded`: `merchantUid`로 주문을 찾아 refunded + 수강권 회수. 부분 환불은 수강권 유지
+  - `payment.cancel_requested`: 운영자 확인 목록에 올림(진도·환불 기한과 함께). 승인·거절은 그로블에서
+  - 같은 결제·환불이 다시 오면 `duplicate`, 같은 전송 키(`X-Groble-Idempotency-Key`)는 기본 키로 막힘
+  - 금액 불일치, 주문번호 없음, 이미 수강 중, 스터디반 정원 참 등은 에러 대신 `needs_review`로 남김(그로블이 같은 실패를 재전송하지 않게). `/admin/payments`에서 확인 후 "확인했어요"
+- 응답: 서명 실패 401, 설정 누락 503·DB 오류 500(그로블이 최대 7번 재전송), 그 밖에는 200
+- 운영자는 환불 판단용으로 수강생 진도를 볼 수 있음
 
 ## 알려진 동작
 
@@ -147,6 +166,6 @@ Supabase CLI를 쓰기 시작하면 `supabase migration repair --status applied 
 2. ~~Supabase 프로젝트 연결: 마이그레이션·시드 적용, 공개 화면을 Supabase 조회로 교체~~
 3. ~~학교 이메일 인증(Supabase Auth), `/instructor`·`/admin`·`/watch` 접근 제어~~
 4. ~~성적 캡처 업로드(비공개 Storage) → 운영자 승인/반려 → 캡처 삭제~~
-5. 결제: ~~주문·수강권·후기 준비~~, 그로블 웹훅(`app/api/webhooks/groble`)에서 결제 확인·수강권 발급, 환불 규칙
+5. ~~결제: 주문·수강권·후기, 그로블 결제창·웹훅으로 결제 확인·수강권 발급, 환불~~
 6. 시청: 스트리밍 서비스 플레이어 + 서명된 재생 토큰, 진도 기록
 7. 후기 작성, 선배에게 질문, 정산, Vercel 배포
