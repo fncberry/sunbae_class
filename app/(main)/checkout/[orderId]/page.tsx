@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getLecture } from "@/lib/data";
 import { OPTION_LABEL, koDate, koDateOf, won } from "@/lib/format";
-import { grobleCheckoutUrl } from "@/lib/groble";
+import { getCheckoutLink, grobleCheckoutUrl } from "@/lib/groble";
 import { getMyOrder } from "@/lib/learning";
 
 export const metadata: Metadata = { title: "결제 | 선배클래스", robots: { index: false } };
@@ -26,8 +26,11 @@ async function CheckoutContent({ params }: { params: PageProps<"/checkout/[order
   const order = await getMyOrder(user, orderId);
   if (!order) notFound();
 
-  const lecture = order.title ? await getLecture(order.lectureId) : null;
-  const payUrl = order.status === "pending" ? grobleCheckoutUrl(order) : null;
+  const [lecture, link] = await Promise.all([
+    order.title ? getLecture(order.lectureId) : null,
+    order.status === "pending" ? getCheckoutLink(order.lectureId, order.option) : null,
+  ]);
+  const payUrl = link ? grobleCheckoutUrl(link, order.id) : null;
 
   return (
     <>

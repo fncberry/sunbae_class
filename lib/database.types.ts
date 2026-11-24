@@ -349,6 +349,32 @@ export type Database = {
           },
         ]
       }
+      lecture_checkout_links: {
+        Row: {
+          lecture_id: string
+          option: Database["public"]["Enums"]["purchase_option"]
+          url: string
+        }
+        Insert: {
+          lecture_id: string
+          option: Database["public"]["Enums"]["purchase_option"]
+          url: string
+        }
+        Update: {
+          lecture_id?: string
+          option?: Database["public"]["Enums"]["purchase_option"]
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lecture_checkout_links_lecture_id_fkey"
+            columns: ["lecture_id"]
+            isOneToOne: false
+            referencedRelation: "lectures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lectures: {
         Row: {
           course_id: string
@@ -481,6 +507,66 @@ export type Database = {
           },
         ]
       }
+      payment_events: {
+        Row: {
+          event_id: string | null
+          id: string
+          merchant_uid: string | null
+          note: string | null
+          occurred_at: string | null
+          order_id: string | null
+          payload: Json
+          received_at: string
+          resolved_at: string | null
+          resolved_by: string | null
+          result: Database["public"]["Enums"]["payment_event_result"]
+          type: string
+        }
+        Insert: {
+          event_id?: string | null
+          id: string
+          merchant_uid?: string | null
+          note?: string | null
+          occurred_at?: string | null
+          order_id?: string | null
+          payload: Json
+          received_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          result?: Database["public"]["Enums"]["payment_event_result"]
+          type: string
+        }
+        Update: {
+          event_id?: string | null
+          id?: string
+          merchant_uid?: string | null
+          note?: string | null
+          occurred_at?: string | null
+          order_id?: string | null
+          payload?: Json
+          received_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          result?: Database["public"]["Enums"]["payment_event_result"]
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_events_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -577,6 +663,7 @@ export type Database = {
       course_track: "major" | "liberal"
       lecture_status: "draft" | "reviewing" | "on_sale" | "hidden" | "rejected"
       order_status: "pending" | "paid" | "refunded" | "cancelled"
+      payment_event_result: "applied" | "duplicate" | "needs_review" | "ignored"
       purchase_option: "video" | "study"
       user_role: "student" | "instructor" | "admin"
       verification_status: "pending" | "approved" | "rejected"

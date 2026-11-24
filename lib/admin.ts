@@ -125,11 +125,150 @@ export async function listReviewingLectures(): Promise<ReviewLecture[]> {
 }
 
 /** 운영자 메뉴에 붙는 대기 건수 */
-export async function adminCounts(): Promise<{ verifications: number; lectures: number }> {
+export type AdminCounts = { verifications: number; lectures: number; payments: number };
+
+export async function adminCounts(): Promise<AdminCounts> {
   const sb = await createServerSupabase();
-  const [v, l] = await Promise.all([
+  const [v, l, p] = await Promise.all([
     sb.from("grade_verifications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     sb.from("lectures").select("id", { count: "exact", head: true }).eq("status", "reviewing"),
+    sb.from("payment_events").select("id", { count: "exact", head: true }).eq("result", "needs_review").is("resolved_at", null),
   ]);
-  return { verifications: v.count ?? 0, lectures: l.count ?? 0 };
+  return { verifications: v.count ?? 0, lectures: l.count ?? 0, payments: p.count ?? 0 };
+}
+
+// ─── 결제 ─────────────────────────────────────────────────
+
+/** 웹훅이 자동으로 처리하지 못해 운영자가 봐야 하는 건 (금액 불일치, 환불 요청, 부분 환불 등) */
+export type PaymentIssue = {
+  id: string;
+  type: string;
+  note: string | null;
+  receivedAt: string;
+  merchantUid: string | null;
+  order: {
+    id: string;
+    amount: number;
+    option: "video" | "study";
+    status: Tables<"orders">["status"];
+    paidAt: string | null;
+    lectureId: string;
+    title: string;
+    examDate: string;
+    examLabel: string;
+    chapterCount: number;
+    completedCount: number;
+    buyer: { name: string | null; studentId: string | null; nickname: string | null };
+  } | null;
+};
+
+type IssueRow = Pick<Tables<"payment_events">, "id" | "type" | "note" | "received_at" | "merchant_uid"> & {
+  order:
+    | (Pick<Tables<"orders">, "id" | "amount" | "option" | "status" | "paid_at" | "lecture_id" | "user_id"> & {
+        lecture: { title: string; chapters: { id: string }[]; course: Pick<Tables<"courses">, "exam_date" | "exam_label"> };
+        buyer: Pick<Tables<"profiles">, "name" | "student_id" | "nickname"> | null;
+      })
+    | null;
+};
+
+export async function listPaymentIssues(): Promise<PaymentIssue[]> {
+  const sb = await createServerSupabase();
+  const { data, error } = await sb
+    .from("payment_events")
+    .select(
+      `id, type, note, received_at, merchant_uid,
+       order:orders(id, amount, option, status, paid_at, lecture_id, user_id,
+         lecture:lectures!inner(title, chapters(id), course:courses!inner(exam_date, exam_label)),
+         buyer:profiles(name, student_id, nickname))`,
+    )
+    .eq("result", "needs_review")
+    .is("resolved_at", null)
+    .order("received_at", { ascending: false })
+    .limit(100)
+    .overrideTypes<IssueRow[], { merge: false }>();
+  if (error) fail("확인할 결제", error);
+
+  return Promise.all(
+    data.map(async (e): Promise<PaymentIssue> => {
+      const o = e.order;
+      let completedCount = 0;
+      if (o) {
+        const chapterIds = o.lecture.chapters.map((c) => c.id);
+        if (chapterIds.length > 0) {
+          const { count } = await sb
+            .from("chapter_progress")
+            .select("chapter_id", { count: "exact", head: true })
+            .eq("user_id", o.user_id)
+            .eq("completed", true)
+            .in("chapter_id", chapterIds);
+          completedCount = count ?? 0;
+        }
+      }
+      return {
+        id: e.id,
+        type: e.type,
+        note: e.note,
+        receivedAt: e.received_at,
+        merchantUid: e.merchant_uid,
+        order: o
+          ? {
+              id: o.id,
+              amount: o.amount,
+              option: o.option,
+              status: o.status,
+              paidAt: o.paid_at,
+              lectureId: o.lecture_id,
+              title: o.lecture.title,
+              examDate: o.lecture.course.exam_date,
+              examLabel: o.lecture.course.exam_label,
+              chapterCount: o.lecture.chapters.length,
+              completedCount,
+              buyer: { name: o.buyer?.name ?? null, studentId: o.buyer?.student_id ?? null, nickname: o.buyer?.nickname ?? null },
+            }
+          : null,
+      };
+    }),
+  );
+}
+
+/** 결제창 링크를 붙일 강의 (판매 중·검수 중) */
+export type LinkLecture = {
+  id: string;
+  title: string;
+  status: Tables<"lectures">["status"];
+  course: Course;
+  price: number;
+  studyPrice: number | null;
+  links: { video: string | null; study: string | null };
+};
+
+export async function listLinkLectures(): Promise<LinkLecture[]> {
+  const sb = await createServerSupabase();
+  const { data, error } = await sb
+    .from("lectures")
+    .select("id, title, status, price, study_group_price, course:courses!inner(*), links:lecture_checkout_links(option, url)")
+    .in("status", ["on_sale", "reviewing"])
+    .order("status")
+    .order("created_at", { ascending: false })
+    .overrideTypes<
+      (Pick<Tables<"lectures">, "id" | "title" | "status" | "price" | "study_group_price"> & {
+        course: Tables<"courses">;
+        links: Pick<Tables<"lecture_checkout_links">, "option" | "url">[];
+      })[],
+      { merge: false }
+    >();
+  if (error) fail("결제창 링크", error);
+
+  return data.map((l) => ({
+    id: l.id,
+    title: l.title,
+    status: l.status,
+    course: toCourse(l.course),
+    price: l.price,
+    studyPrice: l.study_group_price,
+    links: {
+      video: l.links.find((x) => x.option === "video")?.url ?? null,
+      study: l.links.find((x) => x.option === "study")?.url ?? null,
+    },
+  }));
 }

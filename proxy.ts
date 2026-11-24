@@ -47,7 +47,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // 정적 파일·이미지·폰트는 건너뛴다
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)",
+    // 정적 파일·이미지·폰트, 외부 웹훅(세션 없음)은 건너뛴다
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)",
   ],
 };

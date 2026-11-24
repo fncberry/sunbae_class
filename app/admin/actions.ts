@@ -173,3 +173,48 @@ export async function reviewLecture(_prev: DecisionState, formData: FormData): P
   refresh();
   return { status: "done", at };
 }
+
+export type LinkState =
+  | { status: "idle" }
+  | { status: "saved"; at: number }
+  | { status: "error"; at: number; message: string };
+
+const GROBLE_LINK = /^https:\/\/(www\.)?groble\.im\/[A-Za-z0-9/_.~%-]+$/;
+
+/** 강의 결제창 링크 저장. 비우면 지운다(그 방식은 결제를 받지 않는 상태가 된다). */
+export async function saveCheckoutLinks(_prev: LinkState, formData: FormData): Promise<LinkState> {
+  const at = Date.now();
+  const fail = (message: string): LinkState => ({ status: "error", at, message });
+  if (!(await adminOnly())) return fail("운영자만 바꿀 수 있어요.");
+
+  const lectureId = clean(formData.get("lectureId"), 80);
+  const sb = await createServerSupabase();
+
+  for (const option of ["video", "study"] as const) {
+    if (!formData.has(option)) continue;
+    const url = clean(formData.get(option), 300);
+    const { error } = url
+      ? GROBLE_LINK.test(url)
+        ? await sb.from("lecture_checkout_links").upsert({ lecture_id: lectureId, option, url })
+        : { error: { code: "invalid", message: "" } }
+      : await sb.from("lecture_checkout_links").delete().eq("lecture_id", lectureId).eq("option", option);
+    if (error) {
+      if (error.code === "invalid") return fail("그로블 결제창 주소(https://groble.im/…)를 ? 없이 넣어 주세요.");
+      console.error("[admin] checkout link", error.code, error.message);
+      return fail("저장하지 못했어요. 다시 시도해 주세요.");
+    }
+  }
+
+  refresh();
+  return { status: "saved", at };
+}
+
+/** 확인할 결제를 '확인함'으로 표시. 시각·처리자는 DB 트리거가 채운다 */
+export async function resolvePaymentIssue(formData: FormData): Promise<void> {
+  if (!(await adminOnly())) return;
+  const id = clean(formData.get("id"), 200);
+  const sb = await createServerSupabase();
+  const { error } = await sb.from("payment_events").update({ resolved_at: new Date().toISOString() }).eq("id", id);
+  if (error) console.error("[admin] resolve payment", error.code, error.message);
+  refresh();
+}
