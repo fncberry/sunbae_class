@@ -51,3 +51,15 @@ export function koDate(iso: string) {
   const md = `${m}월 ${d}일`;
   return y === CURRENT_YEAR ? md : `${y}년 ${md}`;
 }
+
+/** 후기 본문 최대 길이 (DB 제약 reviews_body_length와 같다) */
+export const REVIEW_MAX = 1000;
+
+const kstDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" });
+
+/** DB 시각(timestamptz)을 한국 날짜로: "11월 24일" */
+export function koDateOf(timestamp: string) {
+  return koDate(kstDay.format(new Date(timestamp)));
+}
+
+export const OPTION_LABEL = { video: "영상 강의", study: "스터디반" } as const;

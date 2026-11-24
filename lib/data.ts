@@ -46,9 +46,22 @@ export function toCourse(row: Tables<"courses">): Course {
   };
 }
 
+// 익명(anon)에게는 instructors·grade_verifications·reviews의 공개 컬럼만 열려 있다(user_id 등은 숨김).
+// 그래서 이 표들은 select("*") 대신 컬럼을 적는다.
+const INSTRUCTOR_PUBLIC = "id, name, major, admission_year, bio";
+const VERIFICATION_PUBLIC = "id, instructor_id, course_id, grade, semester_label, proof_text, status";
+const REVIEW_PUBLIC = "id, lecture_id, author_label, rating, body, created_at";
+
+type PublicInstructor = Pick<Tables<"instructors">, "id" | "name" | "major" | "admission_year" | "bio">;
+type PublicVerification = Pick<
+  Tables<"grade_verifications">,
+  "id" | "instructor_id" | "course_id" | "grade" | "semester_label" | "proof_text" | "status"
+>;
+type PublicReview = Pick<Tables<"reviews">, "id" | "lecture_id" | "author_label" | "rating" | "body" | "created_at">;
+
 type LectureRow = Tables<"lectures"> & {
   course: Tables<"courses">;
-  instructor: Tables<"instructors"> & { grade_verifications: Tables<"grade_verifications">[] };
+  instructor: PublicInstructor & { grade_verifications: PublicVerification[] };
   chapters: Tables<"chapters">[];
 };
 
@@ -56,7 +69,7 @@ type LectureRow = Tables<"lectures"> & {
 const LECTURE_SELECT = `
   *,
   course:courses!inner(*),
-  instructor:instructors!inner(*, grade_verifications(*)),
+  instructor:instructors!inner(${INSTRUCTOR_PUBLIC}, grade_verifications(${VERIFICATION_PUBLIC})),
   chapters(*)
 ` as const;
 
@@ -84,7 +97,7 @@ function toLecture(row: LectureRow): LectureWithRelations | null {
 
   const chapters = [...row.chapters]
     .sort((a, b) => a.position - b.position)
-    .map((c) => ({ title: c.title, minutes: c.minutes, preview: c.is_preview || undefined }));
+    .map((c) => ({ position: c.position, title: c.title, minutes: c.minutes, preview: c.is_preview || undefined }));
 
   const studyGroup =
     row.study_group_price !== null && row.study_group_capacity !== null
@@ -200,9 +213,10 @@ export async function listReviews(lectureId: string): Promise<Review[]> {
   cacheTag("catalog");
   const { data, error } = await publicSupabase()
     .from("reviews")
-    .select("*")
+    .select(REVIEW_PUBLIC)
     .eq("lecture_id", lectureId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .overrideTypes<PublicReview[], { merge: false }>();
   if (error) fail(`강의 ${lectureId} 후기`, error);
   return data.map((r) => ({
     lectureId: r.lecture_id,
@@ -235,7 +249,7 @@ export async function getInstructorProfile(id: string): Promise<InstructorProfil
 
   const [instRes, verRes, counterRes, allLectures] = await Promise.all([
     // user_id(로그인 계정 id)는 공개 화면에 필요 없으므로 가져오지 않는다
-    sb.from("instructors").select("id, name, major, admission_year, bio").eq("id", id).maybeSingle(),
+    sb.from("instructors").select(INSTRUCTOR_PUBLIC).eq("id", id).maybeSingle(),
     sb
       .from("grade_verifications")
       .select("grade, proof_text, course:courses!inner(*)")
@@ -260,10 +274,11 @@ export async function getInstructorProfile(id: string): Promise<InstructorProfil
   if (lectures.length > 0) {
     const { data, error } = await sb
       .from("reviews")
-      .select("*")
+      .select(REVIEW_PUBLIC)
       .in("lecture_id", lectures.map((l) => l.id))
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(20)
+      .overrideTypes<PublicReview[], { merge: false }>();
     if (error) fail(`강사 ${id} 후기`, error);
     reviews = data.map((r) => ({
       lectureId: r.lecture_id,

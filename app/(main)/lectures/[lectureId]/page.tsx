@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { Play } from "lucide-react";
-import { PurchaseBox } from "@/components/PurchaseBox";
 import { SyllabusRow } from "@/components/SyllabusRow";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { getLecture, listLectureIds, listReviews } from "@/lib/data";
-import { courseLabel, instructorMeta, koDate, minutesLabel, totalMinutes, won } from "@/lib/format";
+import { courseLabel, instructorMeta, koDate, minutesLabel, totalMinutes } from "@/lib/format";
+import { PurchaseFallback, PurchaseSlot, ReviewSlot } from "./ViewerSlots";
 
 export async function generateStaticParams() {
   const ids = await listLectureIds();
@@ -20,6 +21,7 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
   const { course, instructor } = lecture;
   const lectureReviews = await listReviews(lecture.id);
   const preview = lecture.chapters.find((c) => c.preview);
+  const watchHref = (position: number | undefined) => `/watch/${lecture.id}?c=${position ?? 0}`;
 
   return (
     <div className="mx-auto max-w-6xl px-6 pb-28 pt-10 lg:pb-0">
@@ -41,12 +43,15 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
 
           <figure className="mt-10">
             <div className="relative grid aspect-video place-items-center rounded-ui bg-ink">
-              <button
-                aria-label="맛보기 재생"
-                className="grid h-16 w-16 place-items-center rounded-full bg-paper text-ink hover:bg-wash"
-              >
-                <Play size={24} className="ml-1 fill-ink" />
-              </button>
+              {preview && (
+                <Link
+                  href={watchHref(preview.position)}
+                  aria-label="맛보기 재생"
+                  className="grid h-16 w-16 place-items-center rounded-full bg-paper text-ink hover:bg-wash"
+                >
+                  <Play size={24} className="ml-1 fill-ink" />
+                </Link>
+              )}
             </div>
             {preview && (
               <figcaption className="mt-3 text-sm text-ink-soft">
@@ -102,7 +107,9 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
                     <span>
                       {ch.title}
                       {ch.preview && (
-                        <button className="ml-3 text-sm font-medium underline underline-offset-4">무료로 보기</button>
+                        <Link href={watchHref(ch.position)} className="ml-3 text-sm font-medium underline underline-offset-4">
+                          무료로 보기
+                        </Link>
                       )}
                     </span>
                     <span className="shrink-0 text-sm text-ink-soft">{ch.minutes}분</span>
@@ -112,6 +119,9 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
             </SyllabusRow>
 
             <SyllabusRow label={`후기 ${lecture.reviewCount}개`}>
+              <Suspense fallback={null}>
+                <ReviewSlot lectureId={lecture.id} />
+              </Suspense>
               {lectureReviews.length > 0 ? (
                 <ul>
                   {lectureReviews.map((r) => (
@@ -131,16 +141,11 @@ export default async function LecturePage(props: PageProps<"/lectures/[lectureId
         </div>
 
         <aside id="purchase" className="scroll-mt-8 lg:sticky lg:top-8 lg:self-start">
-          <PurchaseBox price={lecture.price} studyGroup={lecture.studyGroup} examDate={course.examDate} examLabel={course.examLabel} />
+          {/* 로그인·수강 여부는 요청 시점에 확인한다. 확인 전에는 결제 상자를 먼저 보여준다 */}
+          <Suspense fallback={<PurchaseFallback lecture={lecture} />}>
+            <PurchaseSlot lecture={lecture} />
+          </Suspense>
         </aside>
-      </div>
-
-      {/* 모바일: 결제 영역이 맨 아래로 밀리므로 하단에 고정 바를 둔다 */}
-      <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between gap-4 border-t border-ink bg-paper px-6 py-3 lg:hidden">
-        <p className="text-lg font-semibold">{won(lecture.price)}{lecture.studyGroup ? "부터" : ""}</p>
-        <a href="#purchase" className="rounded-ui bg-pen px-5 py-3 text-sm font-semibold text-paper">
-          구매 방식 고르기
-        </a>
       </div>
     </div>
   );

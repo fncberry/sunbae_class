@@ -77,12 +77,25 @@ export async function requireAdmin(nextPath: string): Promise<CurrentUser> {
   return user;
 }
 
-/** 로그인 후 돌아갈 경로. 다른 사이트로 보내는 주소(//evil.com, /\evil.com)는 막는다. */
+const NEXT_BASE = "https://sunbae-class.invalid";
+
+/**
+ * 로그인 후 돌아갈 경로. 같은 사이트 안의 경로만 통과시킨다.
+ * 브라우저와 같은 규칙으로 URL을 해석해서 비교하므로 //evil.com, /\evil.com, /%09/evil.com 같은 변형도 막는다.
+ */
 export function safeNextPath(next: unknown): string {
-  if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+  if (typeof next !== "string" || !next.startsWith("/")) return "/";
+  let url: URL;
+  try {
+    url = new URL(next, NEXT_BASE);
+  } catch {
     return "/";
   }
-  return next;
+  if (url.origin !== NEXT_BASE) return "/";
+  const path = `${url.pathname}${url.search}${url.hash}`;
+  // 정리한 뒤에도 //로 시작하면 브라우저가 다른 호스트로 읽을 수 있다
+  if (path.startsWith("//") || path.startsWith("/\\")) return "/";
+  return path;
 }
 
 /** 워터마크·화면 표시용 학번. 학번을 아직 안 적었으면 메일 아이디를 쓴다. */

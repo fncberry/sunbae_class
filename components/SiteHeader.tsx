@@ -13,7 +13,7 @@ export function SiteHeader() {
         <nav className="hidden items-center gap-7 text-[15px] text-ink-soft md:flex">
           <Link href="/courses" className="hover:text-ink">과목 찾기</Link>
           <Link href="/instructor" className="hover:text-ink">강사 지원</Link>
-          <Link href="/watch/ds-final-tree-graph" className="hover:text-ink">내 강의</Link>
+          <Link href="/my" className="hover:text-ink">내 강의</Link>
         </nav>
         <div className="ml-auto">
           {/* 세션을 읽는 부분만 요청 시점에 그린다. 나머지 헤더는 정적 */}

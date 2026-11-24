@@ -8,8 +8,9 @@
 - 과목 찾기(`/courses`)는 왼쪽 카테고리(전공 → 단과대학, 교양, 자격증·어학)와 강의 카드 목록입니다. 카테고리·정렬·보기 방식은 URL(`?c=&d=&sort=&view=`)에 남습니다.
 - **고려대 구글 계정(@korea.ac.kr) 로그인**이 됩니다. 고려대 메일은 Google Workspace라 학교 메일 계정으로 구글 로그인을 합니다.
 - 처음 로그인하면 **온보딩**(이름·닉네임·학번·학과·개인정보 동의)을 거칩니다. 온보딩 전에는 `/instructor`·`/watch`·`/admin`이 열리지 않습니다.
-- `/instructor`·`/watch`는 로그인, `/admin`은 운영자만 열립니다. 다만 강사 센터·운영자 화면의 내용은 아직 예시 데이터입니다.
-- 결제(그로블), 영상 스트리밍은 아직 연결하지 않았습니다.
+- 성적 인증(캡처 업로드 → 운영자 승인·반려 → 캡처 삭제)과 강의 검수가 됩니다.
+- 결제 준비: 결제 버튼이 pending 주문을 만들고 `/checkout`으로 보냅니다. 그로블 결제 확인(웹훅)과 수강권 발급은 5단계입니다.
+- 수강생은 `/watch`에서 전체 강의를, 그 밖에는 맛보기만 봅니다. 영상 스트리밍은 아직 연결하지 않았습니다(6단계).
 
 ## 실행
 
@@ -66,9 +67,11 @@ Supabase 대시보드에서 해야 하는 설정:
 | `/lectures/[lectureId]` | 강의 상세: 맛보기, 성적 인증 배지, 커리큘럼, 후기, 결제 옵션(영상/스터디반) |
 | `/login` | 고려대 구글 계정으로 로그인 |
 | `/onboarding` | 가입 마무리 (로그인 필요): 이름·학과(학교 계정에서 미리 채움), 닉네임, 학번, 개인정보 수집·이용 동의 |
-| `/watch/[lectureId]` | 시청 (로그인 필요): 내 학번 워터마크, 챕터 목록, 진도율(예시) |
-| `/instructor` | 강사 센터 (로그인 필요, 내용은 예시): 인증 상태, 판매·정산, 강의 업로드 폼 |
-| `/admin` | 운영자 (운영자만, 내용은 예시): 성적 인증 승인/반려 대기열 |
+| `/watch/[lectureId]` | 시청 (로그인 필요): 수강생·강의 주인·운영자는 전체, 그 밖에는 맛보기. `?c=위치`로 챕터 선택, 학번 워터마크, "다 봤어요" 진도 |
+| `/checkout/[orderId]` | 결제 (로그인 필요): 내 주문, 그로블 결제 링크(`GROBLE_CHECKOUT_URL`이 없으면 "아직 결제를 받을 수 없어요") |
+| `/my` | 내 강의 (로그인 필요): 수강 중인 강의와 진도, 결제 내역 |
+| `/instructor` | 강사 센터 (로그인 필요): 성적 인증 신청, 내 신청 상태, 승인된 과목의 강의 초안·검수 요청 |
+| `/admin` | 운영자 (운영자만): 성적 인증 대기열, 캡처 열람(`/admin/proofs/[id]`), 강의 검수(`/admin/lectures`) |
 
 ## 데이터
 
@@ -78,6 +81,9 @@ Supabase 대시보드에서 해야 하는 설정:
 |---|---|
 | `lib/types.ts` | 화면에서 쓰는 도메인 타입 |
 | `lib/data.ts` | 조회 함수. 공개 카탈로그는 Supabase(anon, RLS) + `"use cache"` + `cacheTag("catalog")` |
+| `lib/learning.ts` | 수강생: 수강권, 시청 화면, 진도, 주문 (캐시 없음) |
+| `lib/instructor-center.ts`, `lib/admin.ts` | 강사 센터, 운영자 화면 (캐시 없음) |
+| `lib/groble.ts` | 그로블 결제 링크 템플릿 |
 | `lib/supabase/public.ts` | 공개 데이터용 서버 클라이언트 (세션 없음) |
 | `lib/database.types.ts` | Supabase가 생성한 DB 타입 |
 | `lib/mock-data.ts` | 더미 데이터. `supabase/seed.sql`의 원본이자 강사 센터·운영자 화면의 임시 데이터 |
@@ -94,7 +100,10 @@ npm run db:test           # PGlite로 마이그레이션+시드 적용 후 권�
 - 누구나: 과목, 강사 공개 프로필, 판매 중 강의·목차, 후기, 승인된 성적 인증
 - 본인만: 프로필(이메일·학번), 주문, 수강권, 진도, 내 인증 신청
 - 영상 재생 정보(`chapter_media`): 맛보기 챕터, 수강생, 강의 주인, 운영자
-- 주문·수강권 쓰기는 서버(service_role)만. 판매 수·평점·스터디반 인원은 트리거가 관리
+- 주문: 학생은 `(lecture_id, option)`만 보내 pending 주문을 만들고, 금액·주문자·상태는 트리거가 정함. paid·refunded 전환과 수강권 발급은 서버(service_role)만
+- 후기: 수강생만, `(lecture_id, rating, body)`만 보냄. 작성자·표시 이름("학과 NN학번")·시각은 트리거가 채움
+- 판매 수·평점·스터디반 인원은 트리거가 관리
+- 익명 사용자는 `instructors`·`reviews`·`grade_verifications`의 공개 컬럼만 읽음(`user_id` 등 숨김). 공개 조회에서 이 표에 `select("*")`를 쓰면 실패함
 - 강사는 인증받은 과목에만 강의를 올릴 수 있고, `판매 중` 전환은 운영자만
 - RLS 헬퍼·트리거 함수는 API에 노출되지 않는 `private` 스키마에 있음
 - 승인된 성적 인증이 없는 강의는 공개 목록에서 빠짐 (성적 배지를 꾸며 붙이지 않기 위해)
@@ -117,6 +126,16 @@ Supabase CLI를 쓰기 시작하면 파일 이름과 버전이 달라서 `supaba
 마이그레이션 `20261123031100_harden_helpers`는 SQL Editor로 적용해서 원격 이력에 없습니다.
 Supabase CLI를 쓰기 시작하면 `supabase migration repair --status applied 20261123031100`을 한 번 실행하세요.
 
+### 결제 준비 (`20261124060000_purchase_groundwork`)
+
+- 결제 버튼 → 서버 액션 `startCheckout`이 pending 주문을 만들고 `/checkout/[orderId]`로 보냄. 24시간 안의 같은 강의·같은 방식 pending 주문은 다시 씀
+- 주문 거부(트리거): 판매 중이 아님, 이미 수강 중, 내 강의, 스터디반 없음, 스터디반 정원 참, 온보딩 전
+- 주문 상태는 pending → paid·cancelled, paid → refunded만. 금액·주문자·강의·방식은 바꿀 수 없음. `paid_at`·`refunded_at`은 자동 기록
+- 수강권(`enrollments`)은 `id`가 기본 키. 살아 있는 수강권은 `(user_id, lecture_id)`당 하나라서 환불(`revoked_at`) 뒤 다시 살 수 있음. 스터디반 정원은 되살리거나 옵션을 바꿀 때도 확인
+- 판매를 멈춘(`hidden`) 강의도 수강권이 있으면 볼 수 있음
+- 그로블 링크: 서버 환경 변수 `GROBLE_CHECKOUT_URL`에 템플릿. `{orderId}` `{lectureId}` `{option}` `{amount}` 자리에 값이 들어감(https만)
+- 로그인 뒤 돌아갈 주소(`safeNextPath`)는 URL로 해석해 같은 출처만 통과
+
 ## 알려진 동작
 
 - 없는 강의·과목 주소는 "없는 페이지예요" 화면과 `noindex`가 나오지만 HTTP 상태는 200입니다.
@@ -127,7 +146,7 @@ Supabase CLI를 쓰기 시작하면 `supabase migration repair --status applied 
 1. ~~데이터 접근 계층 분리~~
 2. ~~Supabase 프로젝트 연결: 마이그레이션·시드 적용, 공개 화면을 Supabase 조회로 교체~~
 3. ~~학교 이메일 인증(Supabase Auth), `/instructor`·`/admin`·`/watch` 접근 제어~~
-4. 성적 캡처 업로드(비공개 Storage) → 운영자 승인/반려 → 캡처 삭제
-5. 결제: 그로블 상품 링크, `app/api/webhooks/groble`에서 수강권 발급, 환불 규칙
+4. ~~성적 캡처 업로드(비공개 Storage) → 운영자 승인/반려 → 캡처 삭제~~
+5. 결제: ~~주문·수강권·후기 준비~~, 그로블 웹훅(`app/api/webhooks/groble`)에서 결제 확인·수강권 발급, 환불 규칙
 6. 시청: 스트리밍 서비스 플레이어 + 서명된 재생 토큰, 진도 기록
 7. 후기 작성, 선배에게 질문, 정산, Vercel 배포

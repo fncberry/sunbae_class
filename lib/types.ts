@@ -38,6 +38,8 @@ export type Instructor = {
 };
 
 export type Chapter = {
+  /** DB의 순서(0부터). 시청 화면 주소 ?c=에 쓴다 */
+  position?: number;
   title: string;
   minutes: number;
   preview?: boolean;
