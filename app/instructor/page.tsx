@@ -5,9 +5,11 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { requireUser } from "@/lib/auth";
 import { listCourses } from "@/lib/data";
-import { courseLabel, courseShortLabel, instructorMeta, won } from "@/lib/format";
+import { courseLabel, courseShortLabel, instructorMeta, koDateOf, won } from "@/lib/format";
 import { getInstructorCenter, type MyVerification } from "@/lib/instructor-center";
 import { admissionLabel } from "@/lib/onboarding";
+import { listMyPendingQuestions } from "@/lib/questions";
+import { AnswerForm } from "@/components/AnswerForm";
 import { ApplyForm, type CourseOption } from "./ApplyForm";
 import { LECTURE_STATUS_TEXT } from "./status";
 
@@ -37,6 +39,7 @@ async function InstructorCenter() {
   const user = await requireUser("/instructor");
   const [center, courses] = await Promise.all([getInstructorCenter(user.id), listCourses()]);
   const { instructor, verifications, approvedCourses, lectures } = center;
+  const pendingQuestions = instructor ? await listMyPendingQuestions(user, instructor.id) : [];
 
   // 이미 인증됐거나 확인 중인 과목은 다시 고를 수 없다
   const blocked = new Map<string, string>();
@@ -65,6 +68,7 @@ async function InstructorCenter() {
       nav={[
         { label: "성적 인증", href: "/instructor#verify", active: true },
         { label: "내 강의", href: "/instructor#lectures" },
+        ...(instructor ? [{ label: `질문 (${pendingQuestions.length})`, href: "/instructor#questions" }] : []),
       ]}
     >
       <div className="max-w-5xl px-8 py-12">
@@ -176,6 +180,34 @@ async function InstructorCenter() {
             </table>
           )}
         </section>
+
+        {instructor && (
+          <section id="questions" className="mt-16 scroll-mt-8">
+            <h2 className="font-serif text-xl font-bold">답을 기다리는 질문</h2>
+            {pendingQuestions.length === 0 ? (
+              <p className="mt-3 text-ink-soft">답을 기다리는 질문이 없어요.</p>
+            ) : (
+              <ul className="mt-4 border-t border-ink">
+                {pendingQuestions.map((q) => (
+                  <li key={q.id} className="border-b border-rule py-5">
+                    <p className="text-sm text-ink-soft">
+                      <Link
+                        href={`/watch/${q.lectureId}${q.chapterPosition !== null ? `?c=${q.chapterPosition}` : ""}#questions`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {q.lectureTitle}
+                        {q.chapterTitle ? ` · ${q.chapterTitle}` : ""}
+                      </Link>
+                      <span className="text-ink-faint"> · {q.authorLabel} · {koDateOf(q.createdAt)}</span>
+                    </p>
+                    <p className="mt-1.5 whitespace-pre-line leading-relaxed">{q.body}</p>
+                    <AnswerForm questionId={q.id} existing={null} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </DashboardShell>
   );

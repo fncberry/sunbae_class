@@ -6,6 +6,9 @@ import { Lock, Play } from "lucide-react";
 import { requireUser, viewerLabel } from "@/lib/auth";
 import { courseLabel } from "@/lib/format";
 import { getWatchLecture, type WatchChapter } from "@/lib/learning";
+import { listLectureQuestions } from "@/lib/questions";
+import { QuestionForm } from "@/components/QuestionForm";
+import { QuestionList } from "@/components/QuestionList";
 import { markChapterDone } from "./actions";
 
 export const metadata: Metadata = { title: "강의 보기 | 선배클래스", robots: { index: false } };
@@ -63,6 +66,11 @@ async function WatchContent({
   const doneCount = chapters.filter((ch) => ch.completed).length;
   const viewer = viewerLabel(user);
   const buyHref = `/lectures/${lecture.id}#purchase`;
+
+  // 질문은 수강생·강의 주인·운영자만 본다
+  const canSeeQuestions = lecture.enrolled || lecture.owner || user.role === "admin";
+  const questions = canSeeQuestions ? await listLectureQuestions(user, lecture.id) : [];
+  const chapterTitles = new Map(chapters.map((ch) => [ch.id, ch.title]));
 
   return (
     <div className="mx-auto max-w-6xl px-6 pt-8">
@@ -129,6 +137,18 @@ async function WatchContent({
                 전체 강의 구매하기
               </Link>
             </p>
+          )}
+
+          {canSeeQuestions && (
+            <section id="questions" className="mt-12 scroll-mt-8">
+              <h2 className="font-serif text-xl font-bold">선배에게 질문 {questions.length > 0 && <span className="text-ink-faint">{questions.length}</span>}</h2>
+              {lecture.enrolled && (
+                <div className="mt-4">
+                  <QuestionForm lectureId={lecture.id} chapterId={current.id} chapterTitle={current.title} />
+                </div>
+              )}
+              <QuestionList questions={questions} chapterTitles={chapterTitles} canAnswer={lecture.owner || user.role === "admin"} />
+            </section>
           )}
         </div>
 
