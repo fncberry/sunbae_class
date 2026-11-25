@@ -69,6 +69,8 @@ export type WatchLecture = {
   access: "full" | "preview";
   /** 진도를 기록하는 사람(수강생)인지 */
   enrolled: boolean;
+  /** 내가 올린 강의 (질문에 답할 수 있음) */
+  owner: boolean;
   chapters: WatchChapter[];
 };
 
@@ -95,7 +97,8 @@ export async function getWatchLecture(user: CurrentUser, lectureId: string): Pro
 
   const access = await getViewerAccess(user, lectureId);
   const enrolled = access.enrollment !== null;
-  const full = enrolled || row.instructor.user_id === user.id || user.role === "admin";
+  const owner = row.instructor.user_id === user.id;
+  const full = enrolled || owner || user.role === "admin";
 
   const chapterIds = row.chapters.map((c) => c.id);
   let completed = new Set<string>();
@@ -117,6 +120,7 @@ export async function getWatchLecture(user: CurrentUser, lectureId: string): Pro
     instructorName: row.instructor.name,
     access: full ? "full" : "preview",
     enrolled,
+    owner,
     chapters: [...row.chapters]
       .sort((a, b) => a.position - b.position)
       .map((c) => ({

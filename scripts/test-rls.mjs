@@ -459,6 +459,46 @@ console.log("\n[그로블 웹훅]");
   check("학생은 링크 수정·삭제 못 함", (await as("authenticated", W1, "delete from lecture_checkout_links returning lecture_id")).rows.length === 0);
 }
 
+console.log("\n[선배에게 질문]");
+{
+  // P1이 T1의 강의(t1-algo)를 수강한다
+  await as("service_role", null, "insert into enrollments (user_id, lecture_id, option) values ($1,'t1-algo','video')", [P1]);
+  const ch1 = await one("postgres", null, "select id from chapters where lecture_id='t1-algo' and position=1");
+  const otherCh = await one("postgres", null, "select id from chapters where lecture_id='ds-final-tree-graph' order by position limit 1");
+  const ask = (uid, body, chapter = ch1.id, extra = "") =>
+    one("authenticated", uid, `insert into lecture_questions (lecture_id, chapter_id, body${extra ? ", " + extra.split("=")[0] : ""}) values ('t1-algo', $1, $2${extra ? ", " + extra.split("=")[1] : ""}) returning *`, [chapter, body]);
+
+  const q1 = await ask(P1, "  2번 풀이에서 왜 힙을 쓰나요?  ");
+  check("수강생은 질문 가능, 작성자·표시 이름은 서버가 채움", q1.user_id === P1 && q1.author_label === "경영학과 25학번" && q1.body === "2번 풀이에서 왜 힙을 쓰나요?", JSON.stringify(q1));
+  check("수강생이 아니면 질문 불가", !!(await rejects("authenticated", S2, "insert into lecture_questions (lecture_id, body) values ('t1-algo','x')")));
+  check("강의 주인은 자기 강의에 질문 불가(수강생 아님)", !!(await rejects("authenticated", T1, "insert into lecture_questions (lecture_id, body) values ('t1-algo','x')")));
+  check("익명은 질문 불가", !!(await rejects("anon", null, "insert into lecture_questions (lecture_id, body) values ('t1-algo','x')")));
+  check("다른 강의 챕터로 질문 불가", !!(await ask(P1, "x", otherCh.id).then(() => false, () => true)));
+  check("작성자를 남으로 정해서 질문 불가", !!(await rejects("authenticated", P1, "insert into lecture_questions (lecture_id, body, user_id) values ('t1-algo','x',$1)", [S2])));
+  check("답변을 미리 채워서 질문 불가", !!(await rejects("authenticated", P1, "insert into lecture_questions (lecture_id, body, answer) values ('t1-algo','x','셀프 답변')")));
+  check("빈 질문 불가", !!(await rejects("authenticated", P1, "insert into lecture_questions (lecture_id, body) values ('t1-algo','   ')")));
+
+  check("강의 주인은 질문을 봄", (await one("authenticated", T1, "select count(*)::int n from lecture_questions where lecture_id='t1-algo'")).n === 1);
+  check("수강하지 않은 학생은 질문이 안 보임", (await one("authenticated", S2, "select count(*)::int n from lecture_questions")).n === 0);
+  check("익명은 질문이 안 보임", !!(await rejects("anon", null, "select * from lecture_questions")));
+  check("운영자는 질문을 봄", (await one("authenticated", A1, "select count(*)::int n from lecture_questions")).n === 1);
+
+  check("답변 전에는 작성자가 질문 수정 가능", (await as("authenticated", P1, "update lecture_questions set body='2번에서 왜 힙인가요?' where id=$1 returning id", [q1.id])).rows.length === 1);
+  check("수강생은 답변 못 함", !!(await rejects("authenticated", P1, "update lecture_questions set answer='셀프' where id=$1", [q1.id])));
+  check("강의 주인은 질문 내용을 못 고침", !!(await rejects("authenticated", T1, "update lecture_questions set body='x' where id=$1", [q1.id])));
+  const answered = await one("authenticated", T1, "update lecture_questions set answer='  매번 최솟값을 꺼내야 해서예요.  ' where id=$1 returning answer, answered_by, answered_at", [q1.id]);
+  check("강의 주인이 답변, 답변자·시각은 서버가 채움", answered.answer === "매번 최솟값을 꺼내야 해서예요." && answered.answered_by === T1 && answered.answered_at !== null, JSON.stringify(answered));
+  check("답변 달린 질문은 작성자가 못 고침", !!(await rejects("authenticated", P1, "update lecture_questions set body='y' where id=$1", [q1.id])));
+  check("답변 달린 질문은 작성자가 못 지움", (await as("authenticated", P1, "delete from lecture_questions where id=$1 returning id", [q1.id])).rows.length === 0);
+  check("작성자·표시 이름은 못 바꿈", !!(await rejects("authenticated", P1, "update lecture_questions set author_label='운영자' where id=$1", [q1.id])));
+  check("다른 강사는 답변 못 함", (await as("authenticated", S2, "update lecture_questions set answer='x' where id=$1 returning id", [q1.id])).rows.length === 0);
+
+  const q2 = await ask(P1, "3강 자료는 언제 올라오나요?");
+  check("답변 전 질문은 작성자가 지움", (await as("authenticated", P1, "delete from lecture_questions where id=$1 returning id", [q2.id])).rows.length === 1);
+  await as("service_role", null, "update enrollments set revoked_at=now() where user_id=$1 and lecture_id='t1-algo'", [P1]);
+  check("환불하면 질문을 더 못 함", !!(await rejects("authenticated", P1, "insert into lecture_questions (lecture_id, body) values ('t1-algo','x')")));
+}
+
 console.log("\n[헬퍼 함수]");
 check("트리거 함수 직접 호출 불가", !!(await rejects("authenticated", S1, "select private.sync_review_counters()")));
 check("헬퍼가 public(API 노출 스키마)에 없음", (await one("postgres", null, "select count(*)::int n from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'")).n === 0);

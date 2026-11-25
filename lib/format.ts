@@ -54,6 +54,8 @@ export function koDate(iso: string) {
 
 /** 후기 본문 최대 길이 (DB 제약 reviews_body_length와 같다) */
 export const REVIEW_MAX = 1000;
+export const QUESTION_MAX = 2000;
+export const ANSWER_MAX = 4000;
 
 const kstDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" });
 

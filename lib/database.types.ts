@@ -375,6 +375,63 @@ export type Database = {
           },
         ]
       }
+      lecture_questions: {
+        Row: {
+          answer: string | null
+          answered_at: string | null
+          answered_by: string | null
+          author_label: string
+          body: string
+          chapter_id: string | null
+          created_at: string
+          id: string
+          lecture_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          answer?: string | null
+          answered_at?: string | null
+          answered_by?: string | null
+          author_label: string
+          body: string
+          chapter_id?: string | null
+          created_at?: string
+          id?: string
+          lecture_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          answer?: string | null
+          answered_at?: string | null
+          answered_by?: string | null
+          author_label?: string
+          body?: string
+          chapter_id?: string | null
+          created_at?: string
+          id?: string
+          lecture_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lecture_questions_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lecture_questions_lecture_id_fkey"
+            columns: ["lecture_id"]
+            isOneToOne: false
+            referencedRelation: "lectures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lectures: {
         Row: {
           course_id: string
