@@ -1,5 +1,6 @@
 // 서버 전용 Supabase 클라이언트 (secret 키, RLS를 거치지 않는다).
-// 그로블 웹훅처럼 로그인한 사용자가 없는 서버 작업에서만 쓴다. 절대 클라이언트 코드에서 import하지 않는다.
+// 그로블 웹훅처럼 로그인한 사용자가 없는 서버 작업, 또는 RLS로는 열 수 없는 합계(강사의 정산 예정 금액)에만 쓴다.
+// 사용자가 보낸 값으로 범위를 정하지 말고, 세션에서 찾은 값만 쓴다. 절대 클라이언트 코드에서 import하지 않는다.
 
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
