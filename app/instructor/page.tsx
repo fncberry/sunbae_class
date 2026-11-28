@@ -5,12 +5,14 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { requireUser } from "@/lib/auth";
 import { listCourses } from "@/lib/data";
-import { courseLabel, courseShortLabel, instructorMeta, koDateOf, won } from "@/lib/format";
+import { INSTRUCTOR_SHARE_PERCENT, courseLabel, courseShortLabel, instructorMeta, koDateOf, periodLabel, won } from "@/lib/format";
 import { getInstructorCenter, type MyVerification } from "@/lib/instructor-center";
 import { admissionLabel } from "@/lib/onboarding";
 import { listMyPendingQuestions } from "@/lib/questions";
+import { getMySettlements, type MySettlements } from "@/lib/settlements";
 import { AnswerForm } from "@/components/AnswerForm";
 import { ApplyForm, type CourseOption } from "./ApplyForm";
+import { PayoutAccountForm } from "./PayoutAccountForm";
 import { LECTURE_STATUS_TEXT } from "./status";
 
 export const metadata: Metadata = { title: "강사 센터 | 선배클래스", robots: { index: false } };
@@ -39,7 +41,9 @@ async function InstructorCenter() {
   const user = await requireUser("/instructor");
   const [center, courses] = await Promise.all([getInstructorCenter(user.id), listCourses()]);
   const { instructor, verifications, approvedCourses, lectures } = center;
-  const pendingQuestions = instructor ? await listMyPendingQuestions(user, instructor.id) : [];
+  const [pendingQuestions, money] = instructor
+    ? await Promise.all([listMyPendingQuestions(user, instructor.id), getMySettlements(instructor.id)])
+    : [[], null];
 
   // 이미 인증됐거나 확인 중인 과목은 다시 고를 수 없다
   const blocked = new Map<string, string>();
@@ -68,7 +72,12 @@ async function InstructorCenter() {
       nav={[
         { label: "성적 인증", href: "/instructor#verify", active: true },
         { label: "내 강의", href: "/instructor#lectures" },
-        ...(instructor ? [{ label: `질문 (${pendingQuestions.length})`, href: "/instructor#questions" }] : []),
+        ...(instructor
+          ? [
+              { label: `질문 (${pendingQuestions.length})`, href: "/instructor#questions" },
+              { label: "정산", href: "/instructor#settlement" },
+            ]
+          : []),
       ]}
     >
       <div className="max-w-5xl px-8 py-12">
@@ -208,7 +217,70 @@ async function InstructorCenter() {
             )}
           </section>
         )}
+
+        {money && <SettlementSection money={money} />}
       </div>
     </DashboardShell>
+  );
+}
+
+function SettlementSection({ money }: { money: MySettlements }) {
+  const { account, settlements, unsettled } = money;
+  return (
+    <section id="settlement" className="mt-16 scroll-mt-8">
+      <h2 className="font-serif text-xl font-bold">정산</h2>
+      <p className="mt-2 text-ink-soft">
+        팔린 금액의 {INSTRUCTOR_SHARE_PERCENT}%를 받아요. 시험이 끝나 환불 기간이 지난 결제를 모아 매달 한 번 보내 드려요.
+      </p>
+
+      {unsettled && (
+        <dl className="mt-6 grid max-w-3xl gap-4 sm:grid-cols-2">
+          <div className="rounded-ui border border-rule p-4">
+            <dt className="text-sm text-ink-soft">다음 정산에 들어갈 금액</dt>
+            <dd className="mt-1 text-2xl font-bold">{won(unsettled.ready.payout)}</dd>
+            <dd className="mt-0.5 text-sm text-ink-faint">결제 {unsettled.ready.count}건</dd>
+          </div>
+          <div className="rounded-ui border border-rule p-4">
+            <dt className="text-sm text-ink-soft">시험이 끝나면 정산할 금액</dt>
+            <dd className="mt-1 text-2xl font-bold">{won(unsettled.waiting.payout)}</dd>
+            <dd className="mt-0.5 text-sm text-ink-faint">결제 {unsettled.waiting.count}건</dd>
+          </div>
+        </dl>
+      )}
+
+      <h3 className="mt-10 font-semibold">받을 계좌</h3>
+      {!account && <p className="mt-1 text-sm text-ink-soft">계좌를 등록해야 정산금을 보낼 수 있어요.</p>}
+      <div className="mt-4">
+        <PayoutAccountForm account={account} />
+      </div>
+
+      <h3 className="mt-10 font-semibold">정산 내역</h3>
+      {settlements.length === 0 ? (
+        <p className="mt-3 text-ink-soft">아직 정산 내역이 없어요.</p>
+      ) : (
+        <table className="mt-4 w-full text-[15px]">
+          <thead className="text-left text-sm text-ink-soft">
+            <tr className="border-b border-ink">
+              <th className="py-2.5 font-normal">정산 달</th>
+              <th className="py-2.5 text-right font-normal">결제</th>
+              <th className="py-2.5 text-right font-normal">판매 금액</th>
+              <th className="py-2.5 text-right font-normal">받을 금액</th>
+              <th className="py-2.5 pl-8 font-normal">상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {settlements.map((s) => (
+              <tr key={s.id} className="border-b border-rule">
+                <td className="py-3">{periodLabel(s.period)}</td>
+                <td className="py-3 text-right">{s.orderCount}건</td>
+                <td className="py-3 text-right">{won(s.gross)}</td>
+                <td className="py-3 text-right font-semibold">{won(s.payout)}</td>
+                <td className="py-3 pl-8">{s.paidAt ? `${koDateOf(s.paidAt)} 보냄` : "보낼 예정"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

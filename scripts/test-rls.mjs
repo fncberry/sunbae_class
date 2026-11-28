@@ -499,6 +499,57 @@ console.log("\n[선배에게 질문]");
   check("환불하면 질문을 더 못 함", !!(await rejects("authenticated", P1, "insert into lecture_questions (lecture_id, body) values ('t1-algo','x')")));
 }
 
+console.log("\n[정산]");
+{
+  // 시험이 끝난 과목과 아직인 과목. t1(T1)과 jung(시드, 계정 없음)의 강의
+  await as("postgres", null, `insert into courses (id, kind, name, group_name, exam_date, exam_label) values
+    ('settle-past','cert','지난 시험','어학', current_date - 3, '정기시험'),
+    ('settle-future','cert','다가올 시험','어학', current_date + 30, '정기시험')`);
+  await as("postgres", null, `insert into lectures (id, course_id, instructor_id, title, price, status) values
+    ('t1-past','settle-past','t1','지난 시험 강의',10000,'on_sale'),
+    ('t1-future','settle-future','t1','다가올 시험 강의',5000,'on_sale'),
+    ('jung-past','settle-past','jung','다른 선배 강의',9000,'on_sale')`);
+  const paidOrder = (lecture, amount, status = "paid") =>
+    one("postgres", null, "insert into orders (user_id, lecture_id, option, amount, status, paid_at) values ($1,$2,'video',$3,$4,now()) returning id", [P1, lecture, amount, status]);
+  const o1 = await paidOrder("t1-past", 10000);
+  const o2 = await paidOrder("t1-past", 3333);
+  const o3 = await paidOrder("t1-past", 10000, "refunded");
+  const o4 = await paidOrder("t1-future", 5000);
+  const o5 = await paidOrder("jung-past", 9000);
+  const settlementOf = async (id) => (await one("postgres", null, "select settlement_id from orders where id=$1", [id])).settlement_id;
+
+  const account = await one("authenticated", T1, "insert into instructor_payout_accounts (instructor_id, bank, account_number, holder) values ('t1','  국민은행 ','123-456-789012',' 강사일 ') returning *");
+  check("강사는 받을 계좌 등록 (앞뒤 공백 정리)", account.bank === "국민은행" && account.holder === "강사일", JSON.stringify(account));
+  check("남의 강사 id로 계좌 등록 불가", !!(await rejects("authenticated", S2, "insert into instructor_payout_accounts (instructor_id, bank, account_number, holder) values ('jung','x','1234567','x')")));
+  check("계좌번호에 글자는 불가", !!(await rejects("authenticated", T1, "update instructor_payout_accounts set account_number='abc-1234' where instructor_id='t1'")));
+  check("다른 학생은 계좌가 안 보임", (await one("authenticated", S2, "select count(*)::int n from instructor_payout_accounts")).n === 0);
+  check("익명은 계좌를 못 봄", !!(await rejects("anon", null, "select * from instructor_payout_accounts")));
+  check("운영자는 계좌를 봄", (await one("authenticated", A1, "select count(*)::int n from instructor_payout_accounts")).n === 1);
+
+  check("강사가 정산을 직접 만들 수 없음", !!(await rejects("authenticated", T1, "insert into settlements (instructor_id) values ('t1')")));
+  check("운영자도 금액을 정해서 만들 수 없음", !!(await rejects("authenticated", A1, "insert into settlements (instructor_id, gross_amount) values ('t1', 999999)")));
+  const s1 = await one("authenticated", A1, "insert into settlements (instructor_id) values ('t1') returning *");
+  check("정산: 시험 지난 결제만 합산, 강사 몫 80%(원 단위 버림)", s1.order_count === 2 && s1.gross_amount === 13333 && s1.payout_amount === 10666 && s1.share_percent === 80 && s1.created_by === A1 && s1.paid_at === null, JSON.stringify(s1));
+  check("정산에 담긴 결제에 정산 id가 붙음", (await settlementOf(o1.id)) === s1.id && (await settlementOf(o2.id)) === s1.id);
+  check("환불된 결제·시험 전 결제·다른 선배 결제는 빠짐", (await settlementOf(o3.id)) === null && (await settlementOf(o4.id)) === null && (await settlementOf(o5.id)) === null);
+  check("같은 결제를 두 번 정산할 수 없음", !!(await rejects("authenticated", A1, "insert into settlements (instructor_id) values ('t1')")));
+
+  check("강사는 본인 정산을 봄", (await one("authenticated", T1, "select count(*)::int n from settlements")).n === 1);
+  check("다른 학생은 정산이 안 보임", (await one("authenticated", S2, "select count(*)::int n from settlements")).n === 0);
+  check("강사는 지급 완료로 바꿀 수 없음", (await as("authenticated", T1, "update settlements set paid_at=now() where id=$1 returning id", [s1.id])).rows.length === 0);
+  check("운영자도 금액은 못 바꿈", !!(await rejects("authenticated", A1, "update settlements set payout_amount=1 where id=$1", [s1.id])));
+  await as("authenticated", A1, "update settlements set paid_at='2000-01-01' where id=$1", [s1.id]);
+  const paid = await one("postgres", null, "select paid_at, paid_by, paid_to from settlements where id=$1", [s1.id]);
+  check("지급 표시: 시각·처리자·보낸 계좌는 서버가 채움", paid.paid_by === A1 && new Date(paid.paid_at).getFullYear() > 2000 && paid.paid_to === "국민은행 123-456-789012 강사일", JSON.stringify(paid));
+  check("지급한 정산은 되돌릴 수 없음", !!(await rejects("authenticated", A1, "update settlements set paid_at=null where id=$1", [s1.id])));
+  check("지급한 정산은 취소(삭제)할 수 없음", (await as("authenticated", A1, "delete from settlements where id=$1 returning id", [s1.id])).rows.length === 0);
+
+  const s2 = await one("authenticated", A1, "insert into settlements (instructor_id) values ('jung') returning id, payout_amount");
+  check("계좌가 없으면 지급 표시 불가", s2.payout_amount === 7200 && !!(await rejects("authenticated", A1, "update settlements set paid_at=now() where id=$1", [s2.id])));
+  check("지급 전 정산은 운영자가 취소, 결제는 다시 정산 대기로", (await as("authenticated", A1, "delete from settlements where id=$1 returning id", [s2.id])).rows.length === 1 && (await settlementOf(o5.id)) === null);
+  check("강사는 정산을 취소할 수 없음", (await as("authenticated", T1, "delete from settlements where id=$1 returning id", [s1.id])).rows.length === 0);
+}
+
 console.log("\n[헬퍼 함수]");
 check("트리거 함수 직접 호출 불가", !!(await rejects("authenticated", S1, "select private.sync_review_counters()")));
 check("헬퍼가 public(API 노출 스키마)에 없음", (await one("postgres", null, "select count(*)::int n from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'")).n === 0);

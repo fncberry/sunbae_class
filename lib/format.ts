@@ -65,3 +65,22 @@ export function koDateOf(timestamp: string) {
 }
 
 export const OPTION_LABEL = { video: "영상 강의", study: "스터디반" } as const;
+
+/** 강사 몫(%). 실제 정산 금액은 DB 트리거(private.prepare_settlement)가 같은 비율로 계산한다 */
+export const INSTRUCTOR_SHARE_PERCENT = 80;
+
+/** 강사 몫 (원 단위 버림) */
+export function instructorShare(gross: number) {
+  return Math.floor((gross * INSTRUCTOR_SHARE_PERCENT) / 100);
+}
+
+/** 정산 달 "2026-12" → "2026년 12월" */
+export function periodLabel(period: string) {
+  const [y, m] = period.split("-").map(Number);
+  return `${y}년 ${m}월`;
+}
+
+/** 지금 한국 날짜 (YYYY-MM-DD). 요청 처리 중에만 부른다(프리렌더 중 금지) */
+export function kstToday() {
+  return kstDay.format(new Date());
+}

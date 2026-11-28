@@ -2,6 +2,7 @@
 
 import { refresh, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
+import type { Database } from "@/lib/database.types";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { PROOF_BUCKET, clean } from "@/lib/verification";
 
@@ -217,4 +218,60 @@ export async function resolvePaymentIssue(formData: FormData): Promise<void> {
   const { error } = await sb.from("payment_events").update({ resolved_at: new Date().toISOString() }).eq("id", id);
   if (error) console.error("[admin] resolve payment", error.code, error.message);
   refresh();
+}
+
+// ─── 정산 ─────────────────────────────────────────────────
+
+export type SettleState = { status: "idle" } | { status: "done"; at: number } | { status: "error"; at: number; message: string };
+
+const SETTLE_ERRORS: Record<string, string> = {
+  nothing_to_settle: "정산할 결제가 없어요.",
+  no_account: "강사가 받을 계좌를 아직 등록하지 않았어요.",
+  already_paid: "이미 지급한 정산이에요.",
+};
+
+function settleFail(at: number, what: string, error: { code?: string; message: string; hint?: string | null }): SettleState {
+  const known = error.hint ? SETTLE_ERRORS[error.hint] : undefined;
+  if (!known) console.error(`[admin] ${what}`, error.code, error.message);
+  return { status: "error", at, message: known ?? "처리하지 못했어요. 다시 시도해 주세요." };
+}
+
+/** 정산 만들기: 강사만 고르면 금액·담을 결제는 DB 트리거가 정한다 */
+export async function createSettlement(_prev: SettleState, formData: FormData): Promise<SettleState> {
+  const at = Date.now();
+  if (!(await adminOnly())) return { status: "error", at, message: "운영자만 할 수 있어요." };
+  const instructorId = clean(formData.get("id"), 80);
+  const sb = await createServerSupabase();
+  const { error } = await sb
+    .from("settlements")
+    .insert({ instructor_id: instructorId } as Database["public"]["Tables"]["settlements"]["Insert"]);
+  if (error) return settleFail(at, "create settlement", error);
+  refresh();
+  return { status: "done", at };
+}
+
+/** 계좌이체를 마친 뒤 지급 완료로 표시. 시각·보낸 계좌는 DB 트리거가 기록한다 */
+export async function markSettlementPaid(_prev: SettleState, formData: FormData): Promise<SettleState> {
+  const at = Date.now();
+  if (!(await adminOnly())) return { status: "error", at, message: "운영자만 할 수 있어요." };
+  const id = clean(formData.get("id"), 40);
+  const sb = await createServerSupabase();
+  const { data, error } = await sb.from("settlements").update({ paid_at: new Date().toISOString() }).eq("id", id).select("id");
+  if (error) return settleFail(at, "mark settlement paid", error);
+  if (data.length === 0) return { status: "error", at, message: "정산을 찾지 못했어요." };
+  refresh();
+  return { status: "done", at };
+}
+
+/** 지급 전 정산 취소: 담겼던 결제는 다시 정산 대기로 돌아간다 */
+export async function cancelSettlement(_prev: SettleState, formData: FormData): Promise<SettleState> {
+  const at = Date.now();
+  if (!(await adminOnly())) return { status: "error", at, message: "운영자만 할 수 있어요." };
+  const id = clean(formData.get("id"), 40);
+  const sb = await createServerSupabase();
+  const { data, error } = await sb.from("settlements").delete().eq("id", id).is("paid_at", null).select("id");
+  if (error) return settleFail(at, "cancel settlement", error);
+  if (data.length === 0) return { status: "error", at, message: "지급 전 정산만 취소할 수 있어요." };
+  refresh();
+  return { status: "done", at };
 }

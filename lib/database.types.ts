@@ -311,6 +311,38 @@ export type Database = {
           },
         ]
       }
+      instructor_payout_accounts: {
+        Row: {
+          account_number: string
+          bank: string
+          holder: string
+          instructor_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_number: string
+          bank: string
+          holder: string
+          instructor_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string
+          bank?: string
+          holder?: string
+          instructor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instructor_payout_accounts_instructor_id_fkey"
+            columns: ["instructor_id"]
+            isOneToOne: true
+            referencedRelation: "instructors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instructors: {
         Row: {
           admission_year: number | null
@@ -518,6 +550,7 @@ export type Database = {
           provider: string
           provider_order_id: string | null
           refunded_at: string | null
+          settlement_id: string | null
           status: Database["public"]["Enums"]["order_status"]
           user_id: string
         }
@@ -531,6 +564,7 @@ export type Database = {
           provider?: string
           provider_order_id?: string | null
           refunded_at?: string | null
+          settlement_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           user_id: string
         }
@@ -544,6 +578,7 @@ export type Database = {
           provider?: string
           provider_order_id?: string | null
           refunded_at?: string | null
+          settlement_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           user_id?: string
         }
@@ -553,6 +588,13 @@ export type Database = {
             columns: ["lecture_id"]
             isOneToOne: false
             referencedRelation: "lectures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_settlement_id_fkey"
+            columns: ["settlement_id"]
+            isOneToOne: false
+            referencedRelation: "settlements"
             referencedColumns: ["id"]
           },
           {
@@ -702,6 +744,76 @@ export type Database = {
           {
             foreignKeyName: "reviews_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settlements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          cutoff_date: string
+          gross_amount: number
+          id: string
+          instructor_id: string
+          order_count: number
+          paid_at: string | null
+          paid_by: string | null
+          paid_to: string | null
+          payout_amount: number
+          period: string
+          share_percent: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          cutoff_date: string
+          gross_amount: number
+          id?: string
+          instructor_id: string
+          order_count: number
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_to?: string | null
+          payout_amount: number
+          period: string
+          share_percent: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          cutoff_date?: string
+          gross_amount?: number
+          id?: string
+          instructor_id?: string
+          order_count?: number
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_to?: string | null
+          payout_amount?: number
+          period?: string
+          share_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_instructor_id_fkey"
+            columns: ["instructor_id"]
+            isOneToOne: false
+            referencedRelation: "instructors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "settlements_paid_by_fkey"
+            columns: ["paid_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

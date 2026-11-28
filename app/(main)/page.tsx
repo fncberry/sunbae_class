@@ -71,7 +71,7 @@ export default async function HomePage() {
 
       <Section title="강사 지원">
         <p className="max-w-[52ch] text-lg leading-relaxed">
-          A+를 받은 과목이 있다면 그 과목 강의를 올릴 수 있어요. 성적표 캡처로 인증하고, 팔린 금액의 70%를 받아요.
+          A+를 받은 과목이 있다면 그 과목 강의를 올릴 수 있어요. 성적표 캡처로 인증하고, 팔린 금액의 80%를 받아요.
         </p>
         <Link
           href="/instructor"

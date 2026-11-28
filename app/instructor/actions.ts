@@ -252,3 +252,41 @@ export async function saveLecture(_prev: LectureState, formData: FormData): Prom
   if (!lectureId) redirect(`/instructor/lectures/${id}?saved=${review ? "review" : "draft"}`);
   return { status: "saved", at, message: review ? "검수를 요청했어요. 보통 1~2일 걸려요." : "초안을 저장했어요." };
 }
+
+// ─── 정산 계좌 ────────────────────────────────────────────
+
+export type AccountField = "bank" | "accountNumber" | "holder";
+export type AccountState =
+  | { status: "idle" }
+  | { status: "saved"; at: number }
+  | { status: "error"; at: number; message: string; field?: AccountField };
+
+/** 정산 받을 계좌 등록·수정. 본인 강사 프로필에만 저장된다(RLS) */
+export async function savePayoutAccount(_prev: AccountState, formData: FormData): Promise<AccountState> {
+  const at = Date.now();
+  const fail = (message: string, field?: AccountField): AccountState => ({ status: "error", at, message, field });
+  const user = await signedInUser();
+
+  const bank = clean(formData.get("bank"), 30);
+  const accountNumber = clean(formData.get("accountNumber"), 40).replace(/\s/g, "");
+  const holder = clean(formData.get("holder"), 30);
+  if (!bank) return fail("은행을 적어 주세요.", "bank");
+  if (!/^[0-9][0-9-]{4,28}[0-9]$/.test(accountNumber)) return fail("계좌번호는 숫자와 -만 적어 주세요.", "accountNumber");
+  if (!holder) return fail("예금주를 적어 주세요.", "holder");
+
+  const sb = await createServerSupabase();
+  const found = await sb.from("instructors").select("id").eq("user_id", user.id).maybeSingle();
+  if (!found.data) return fail("성적 인증을 먼저 신청해 주세요.");
+  const instructorId = found.data.id;
+
+  const existing = await sb.from("instructor_payout_accounts").select("instructor_id").eq("instructor_id", instructorId).maybeSingle();
+  const { error } = existing.data
+    ? await sb.from("instructor_payout_accounts").update({ bank, account_number: accountNumber, holder }).eq("instructor_id", instructorId)
+    : await sb.from("instructor_payout_accounts").insert({ instructor_id: instructorId, bank, account_number: accountNumber, holder });
+  if (error) {
+    console.error("[instructor] payout account", error.code, error.message);
+    return fail("저장하지 못했어요. 다시 시도해 주세요.");
+  }
+  refresh();
+  return { status: "saved", at };
+}

@@ -6,6 +6,8 @@ import type { Tables } from "./database.types";
 import type { Course } from "./types";
 import { toCourse } from "./data";
 import { toMyLecture, type MyLecture } from "./instructor-center";
+import { instructorShare, kstToday } from "./format";
+import { SETTLEMENT_SELECT, toAccount, toSettlement, type PayoutAccount, type Settlement } from "./settlements";
 
 export type Applicant = {
   instructorId: string;
@@ -125,16 +127,17 @@ export async function listReviewingLectures(): Promise<ReviewLecture[]> {
 }
 
 /** 운영자 메뉴에 붙는 대기 건수 */
-export type AdminCounts = { verifications: number; lectures: number; payments: number };
+export type AdminCounts = { verifications: number; lectures: number; payments: number; settlements: number };
 
 export async function adminCounts(): Promise<AdminCounts> {
   const sb = await createServerSupabase();
-  const [v, l, p] = await Promise.all([
+  const [v, l, p, st] = await Promise.all([
     sb.from("grade_verifications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     sb.from("lectures").select("id", { count: "exact", head: true }).eq("status", "reviewing"),
     sb.from("payment_events").select("id", { count: "exact", head: true }).eq("result", "needs_review").is("resolved_at", null),
+    sb.from("settlements").select("id", { count: "exact", head: true }).is("paid_at", null),
   ]);
-  return { verifications: v.count ?? 0, lectures: l.count ?? 0, payments: p.count ?? 0 };
+  return { verifications: v.count ?? 0, lectures: l.count ?? 0, payments: p.count ?? 0, settlements: st.count ?? 0 };
 }
 
 // ─── 결제 ─────────────────────────────────────────────────
@@ -271,4 +274,131 @@ export async function listLinkLectures(): Promise<LinkLecture[]> {
       study: l.links.find((x) => x.option === "study")?.url ?? null,
     },
   }));
+}
+
+// ─── 정산 ─────────────────────────────────────────────────
+
+/** 정산할 수 있는 강사: 시험이 끝났고 아직 정산하지 않은 결제가 있다 */
+export type SettleCandidate = {
+  instructor: Applicant;
+  account: PayoutAccount | null;
+  orderCount: number;
+  gross: number;
+  payout: number;
+};
+
+export type AdminSettlement = Settlement & {
+  instructor: Applicant;
+  account: PayoutAccount | null;
+  /** 정산에 담은 뒤 환불된 결제 수 (지급 전이면 취소하고 다시 만든다) */
+  refundedCount: number;
+};
+
+/** 정산 뒤 환불된 결제 (최근 90일). 이미 보낸 돈이면 다음 정산에서 따로 빼야 한다 */
+export type RefundAfterSettlement = {
+  orderId: string;
+  amount: number;
+  refundedAt: string | null;
+  title: string;
+  instructor: Applicant;
+  period: string;
+  settlementPaid: boolean;
+};
+
+type AccountRow = Pick<Tables<"instructor_payout_accounts">, "bank" | "account_number" | "holder" | "updated_at">;
+
+async function instructorsWithAccounts(ids: string[]) {
+  const map = new Map<string, { instructor: Applicant; account: PayoutAccount | null }>();
+  if (ids.length === 0) return map;
+  const sb = await createServerSupabase();
+  const { data, error } = await sb
+    .from("instructors")
+    .select(`${INSTRUCTOR_SELECT}, account:instructor_payout_accounts(bank, account_number, holder, updated_at)`)
+    .in("id", ids)
+    .overrideTypes<(InstructorBits & { account: AccountRow | null })[], { merge: false }>();
+  if (error) fail("정산 강사", error);
+  for (const i of data) map.set(i.id, { instructor: toApplicant(i), account: toAccount(i.account) });
+  return map;
+}
+
+export async function listSettleCandidates(): Promise<SettleCandidate[]> {
+  const sb = await createServerSupabase();
+  const { data, error } = await sb
+    .from("orders")
+    .select("amount, lecture:lectures!inner(instructor_id, course:courses!inner(exam_date))")
+    .eq("status", "paid")
+    .is("settlement_id", null)
+    .overrideTypes<{ amount: number; lecture: { instructor_id: string; course: { exam_date: string } } }[], { merge: false }>();
+  if (error) fail("정산할 결제", error);
+
+  const today = kstToday();
+  const byInstructor = new Map<string, { count: number; gross: number }>();
+  for (const o of data) {
+    if (o.lecture.course.exam_date >= today) continue;
+    const cur = byInstructor.get(o.lecture.instructor_id) ?? { count: 0, gross: 0 };
+    byInstructor.set(o.lecture.instructor_id, { count: cur.count + 1, gross: cur.gross + o.amount });
+  }
+
+  const people = await instructorsWithAccounts([...byInstructor.keys()]);
+  return [...byInstructor.entries()]
+    .flatMap(([id, sum]) => {
+      const p = people.get(id);
+      return p ? [{ ...p, orderCount: sum.count, gross: sum.gross, payout: instructorShare(sum.gross) }] : [];
+    })
+    .sort((a, b) => b.gross - a.gross);
+}
+
+export async function listSettlements(paid: boolean): Promise<AdminSettlement[]> {
+  const sb = await createServerSupabase();
+  let q = sb.from("settlements").select(`${SETTLEMENT_SELECT}, orders(status)`);
+  q = paid ? q.not("paid_at", "is", null).order("paid_at", { ascending: false }).limit(30) : q.is("paid_at", null).order("created_at");
+  const { data, error } = await q.overrideTypes<
+    (Parameters<typeof toSettlement>[0] & { orders: { status: Tables<"orders">["status"] }[] })[],
+    { merge: false }
+  >();
+  if (error) fail(paid ? "지급한 정산" : "지급 대기 정산", error);
+
+  const people = await instructorsWithAccounts([...new Set(data.map((s) => s.instructor_id))]);
+  return data.flatMap((s) => {
+    const p = people.get(s.instructor_id);
+    if (!p) return [];
+    return [{ ...toSettlement(s), ...p, refundedCount: s.orders.filter((o) => o.status === "refunded").length }];
+  });
+}
+
+export async function listRefundsAfterSettlement(): Promise<RefundAfterSettlement[]> {
+  const sb = await createServerSupabase();
+  const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await sb
+    .from("orders")
+    .select("id, amount, refunded_at, lecture:lectures!inner(title, instructor_id), settlement:settlements!inner(period, paid_at)")
+    .eq("status", "refunded")
+    .not("settlement_id", "is", null)
+    .gte("refunded_at", since)
+    .order("refunded_at", { ascending: false })
+    .overrideTypes<
+      (Pick<Tables<"orders">, "id" | "amount" | "refunded_at"> & {
+        lecture: { title: string; instructor_id: string };
+        settlement: { period: string; paid_at: string | null };
+      })[],
+      { merge: false }
+    >();
+  if (error) fail("정산 뒤 환불", error);
+
+  const people = await instructorsWithAccounts([...new Set(data.map((o) => o.lecture.instructor_id))]);
+  return data.flatMap((o) => {
+    const p = people.get(o.lecture.instructor_id);
+    if (!p) return [];
+    return [
+      {
+        orderId: o.id,
+        amount: o.amount,
+        refundedAt: o.refunded_at,
+        title: o.lecture.title,
+        instructor: p.instructor,
+        period: o.settlement.period,
+        settlementPaid: o.settlement.paid_at !== null,
+      },
+    ];
+  });
 }

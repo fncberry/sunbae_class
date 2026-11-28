@@ -492,7 +492,7 @@ export const reviews: Review[] = [
 
 // 강사 대시보드용 더미 (로그인한 강사 = 정하윤 가정)
 export const currentInstructorId = "jung";
-export const instructorShare = 0.7; // 강사 정산 비율 (판매가 기준, 예시)
+export const instructorShare = 0.8; // 강사 정산 비율 (판매가 기준, 예시)
 
 export const monthlySales: MonthlySales[] = [
   { month: "9월", count: 6 },
