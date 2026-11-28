@@ -126,8 +126,17 @@ export function OnboardingForm({
           <dt className="text-ink-faint">쓰는 곳</dt>
           <dd>재학생 확인, 강의 영상 워터마크, 후기 작성자 표시, 강사 지원·정산 확인</dd>
           <dt className="text-ink-faint">보관 기간</dt>
-          <dd>탈퇴할 때까지</dd>
+          <dd>탈퇴할 때까지 (결제·정산 기록은 법에 따라 5년)</dd>
         </dl>
+        <p className="mt-3 pl-7 text-ink-soft">
+          <a href="/terms" target="_blank" className="underline underline-offset-4 hover:text-ink">
+            이용약관
+          </a>{" "}
+          ·{" "}
+          <a href="/privacy" target="_blank" className="underline underline-offset-4 hover:text-ink">
+            개인정보처리방침
+          </a>
+        </p>
       </fieldset>
 
       {error && (
