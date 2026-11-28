@@ -249,7 +249,9 @@ function SettlementSection({ money }: { money: MySettlements }) {
       )}
 
       <h3 className="mt-10 font-semibold">받을 계좌</h3>
-      {!account && <p className="mt-1 text-sm text-ink-soft">계좌를 등록해야 정산금을 보낼 수 있어요.</p>}
+      <p className="mt-1 text-sm text-ink-soft">
+        {account ? "정산에만 쓰고, 운영자만 봐요." : "계좌를 등록해야 정산금을 보낼 수 있어요. 정산에만 쓰고, 운영자만 봐요."}
+      </p>
       <div className="mt-4">
         <PayoutAccountForm account={account} />
       </div>
